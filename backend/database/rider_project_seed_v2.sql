@@ -17,13 +17,19 @@
 -- each is distinct, and the validation block checks all are within 3 km and separated by >= 50 m.
 
 BEGIN;
+
 SET TIME ZONE 'Asia/Bangkok';
 
 DROP TABLE IF EXISTS route_stops CASCADE;
+
 DROP TABLE IF EXISTS route_plans CASCADE;
+
 DROP TABLE IF EXISTS orders CASCADE;
+
 DROP TABLE IF EXISTS riders CASCADE;
+
 DROP TABLE IF EXISTS customers CASCADE;
+
 DROP TABLE IF EXISTS stores CASCADE;
 
 CREATE TABLE stores (
@@ -31,8 +37,10 @@ CREATE TABLE stores (
     store_name VARCHAR(150) NOT NULL,
     phone VARCHAR(20) NOT NULL,
     address VARCHAR(255) NOT NULL,
-    latitude NUMERIC(10,7) NOT NULL CHECK (latitude BETWEEN -90 AND 90),
-    longitude NUMERIC(10,7) NOT NULL CHECK (longitude BETWEEN -180 AND 180),
+    latitude NUMERIC(10, 7) NOT NULL CHECK (latitude BETWEEN -90 AND 90),
+    longitude NUMERIC(10, 7) NOT NULL CHECK (
+        longitude BETWEEN -180 AND 180
+    ),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -44,8 +52,10 @@ CREATE TABLE customers (
     last_name VARCHAR(100) NOT NULL,
     phone VARCHAR(20) NOT NULL,
     address VARCHAR(255) NOT NULL,
-    latitude NUMERIC(10,7) NOT NULL CHECK (latitude BETWEEN -90 AND 90),
-    longitude NUMERIC(10,7) NOT NULL CHECK (longitude BETWEEN -180 AND 180),
+    latitude NUMERIC(10, 7) NOT NULL CHECK (latitude BETWEEN -90 AND 90),
+    longitude NUMERIC(10, 7) NOT NULL CHECK (
+        longitude BETWEEN -180 AND 180
+    ),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -55,55 +65,91 @@ CREATE TABLE riders (
     name VARCHAR(150) NOT NULL,
     phone VARCHAR(20) NOT NULL,
     vehicle_plate VARCHAR(20) NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'AVAILABLE' CHECK (status IN ('AVAILABLE', 'BUSY', 'INACTIVE')) ,
-    max_orders_per_route SMALLINT NOT NULL DEFAULT 3 CHECK (max_orders_per_route BETWEEN 1 AND 3)
+    status VARCHAR(20) NOT NULL DEFAULT 'AVAILABLE' CHECK (
+        status IN (
+            'AVAILABLE',
+            'BUSY',
+            'INACTIVE'
+        )
+    ),
+    max_orders_per_route SMALLINT NOT NULL DEFAULT 3 CHECK (
+        max_orders_per_route BETWEEN 1 AND 3
+    )
 );
 
 CREATE TABLE orders (
     order_id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    customer_id INTEGER NOT NULL REFERENCES customers(customer_id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    customer_id INTEGER NOT NULL REFERENCES customers (customer_id) ON UPDATE CASCADE ON DELETE RESTRICT,
     box_quantity SMALLINT NOT NULL CHECK (box_quantity BETWEEN 1 AND 3),
     order_date DATE NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'ASSIGNED', 'DELIVERING', 'DELIVERED', 'CANCELLED')) ,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (
+        status IN (
+            'PENDING',
+            'ASSIGNED',
+            'DELIVERING',
+            'DELIVERED',
+            'CANCELLED'
+        )
+    ),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE route_plans (
     route_plan_id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    store_id INTEGER NOT NULL REFERENCES stores(store_id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    store_id INTEGER NOT NULL REFERENCES stores (store_id) ON UPDATE CASCADE ON DELETE RESTRICT,
     route_date DATE NOT NULL,
     version INTEGER NOT NULL CHECK (version >= 1),
-    status VARCHAR(20) NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT', 'SELECTED', 'REJECTED', 'COMPLETED')) ,
-    total_distance NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (total_distance >= 0),
+    status VARCHAR(20) NOT NULL DEFAULT 'DRAFT' CHECK (
+        status IN (
+            'DRAFT',
+            'SELECTED',
+            'REJECTED',
+            'COMPLETED'
+        )
+    ),
+    total_distance NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (total_distance >= 0),
     estimated_minutes INTEGER NOT NULL DEFAULT 0 CHECK (estimated_minutes >= 0),
-    total_cost NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (total_cost >= 0),
-    total_revenue NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (total_revenue >= 0),
-    total_profit NUMERIC(10,2) NOT NULL DEFAULT 0,
+    total_cost NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (total_cost >= 0),
+    total_revenue NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (total_revenue >= 0),
+    total_profit NUMERIC(10, 2) NOT NULL DEFAULT 0,
     calculated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     worksheet_code VARCHAR(30) NOT NULL UNIQUE
 );
 
 CREATE TABLE route_stops (
     route_stop_id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    route_plan_id INTEGER NOT NULL REFERENCES route_plans(route_plan_id) ON UPDATE CASCADE ON DELETE CASCADE,
-    rider_id INTEGER NOT NULL REFERENCES riders(rider_id) ON UPDATE CASCADE ON DELETE RESTRICT,
-    order_id INTEGER NOT NULL REFERENCES orders(order_id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    route_plan_id INTEGER NOT NULL REFERENCES route_plans (route_plan_id) ON UPDATE CASCADE ON DELETE CASCADE,
+    rider_id INTEGER NOT NULL REFERENCES riders (rider_id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    order_id INTEGER NOT NULL REFERENCES orders (order_id) ON UPDATE CASCADE ON DELETE RESTRICT,
     stop_sequence INTEGER NOT NULL CHECK (stop_sequence >= 1),
-    distance_from_previous NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (distance_from_previous >= 0),
+    distance_from_previous NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (distance_from_previous >= 0),
     estimated_arrival TIMESTAMPTZ,
-    delivery_status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (delivery_status IN ('PENDING', 'DELIVERED', 'FAILED')) ,
+    delivery_status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (
+        delivery_status IN (
+            'PENDING',
+            'DELIVERED',
+            'FAILED'
+        )
+    ),
     delivered_at TIMESTAMPTZ,
     UNIQUE (route_plan_id, stop_sequence),
     UNIQUE (route_plan_id, order_id)
 );
 
 CREATE INDEX idx_customers_name ON customers (first_name, last_name);
+
 CREATE INDEX idx_customers_location ON customers (latitude, longitude);
+
 CREATE INDEX idx_orders_customer ON orders (customer_id);
+
 CREATE INDEX idx_orders_date_status ON orders (order_date, status);
+
 CREATE INDEX idx_riders_status ON riders (status);
+
 CREATE INDEX idx_route_plans_store_date ON route_plans (store_id, route_date, version);
+
 CREATE INDEX idx_route_stops_rider ON route_stops (route_plan_id, rider_id);
+
 CREATE INDEX idx_route_stops_order ON route_stops (order_id);
 
 CREATE OR REPLACE FUNCTION set_updated_at() RETURNS trigger AS $$
@@ -115,41 +161,254 @@ $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_stores_updated_at BEFORE UPDATE ON stores
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
 CREATE TRIGGER trg_customers_updated_at BEFORE UPDATE ON customers
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-INSERT INTO stores (store_name, phone, address, latitude, longitude, is_active) VALUES
-('ร้านข้าวกล่องจำลอง มมส. (จุดทดสอบ)', '0900000000', 'จุดร้านจำลองติดแนวถนนหน้า HS - ศาลหลักเมือง ใกล้มหาวิทยาลัยมหาสารคาม ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2443350, 103.2494546, TRUE);
+INSERT INTO
+    stores (
+        store_name,
+        phone,
+        address,
+        latitude,
+        longitude,
+        is_active
+    )
+VALUES (
+        'ร้านข้าวกล่องจำลอง มมส. (จุดทดสอบ)',
+        '0900000000',
+        'จุดร้านจำลองติดแนวถนนหน้า HS - ศาลหลักเมือง ใกล้มหาวิทยาลัยมหาสารคาม ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2443350,
+        103.2494546,
+        TRUE
+    );
 
 -- Synthetic customer delivery points. IDs are generated by the IDENTITY columns.
-INSERT INTO customers (first_name, last_name, phone, address, latitude, longitude) VALUES
-('ธนกฤต', 'แสงทอง', '0900000001', 'อรัญชัยแกรนด์ ห้อง 305, ถนนหน้า มมส. ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2408125, 103.2440625),
-('พิมพ์ชนก', 'วัฒนชัย', '0900000002', 'เจมส์บอนด์แมนชั่น ห้อง 204, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2420625, 103.2434375),
-('ณัฐวุฒิ', 'คำดี', '0900000003', 'หอพักนักศึกษาฝั่งตะวันตก มมส. ห้อง 202, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2415500, 103.2431000),
-('ชลธิชา', 'ศรีสุข', '0900000004', 'บ้านเช่านักศึกษาชุมชนขามเรียง ห้อง 01, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2399500, 103.2443500),
-('ภาคิน', 'บุญมี', '0900000005', 'หอพักนักศึกษาใกล้รั้ว มมส. ห้อง 106, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2428500, 103.2429500),
-('กัญญารัตน์', 'อินทร์คำ', '0900000006', 'อพาร์ตเมนต์ชุมชนขามเรียง ห้อง 301, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2418500, 103.2450500),
-('ศุภกร', 'วิเศษวงศ์', '0900000007', 'หอพักนักศึกษาซอยศรีสะอาด ห้อง 202, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2512369, 103.2432242),
-('อรปรียา', 'มณีรัตน์', '0900000008', 'หอพักนักศึกษาซอยศรีสะอาด ห้อง 305, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2520500, 103.2430000),
-('วรเมธ', 'จันทร์ดี', '0900000009', 'หอพักนักศึกษาฝั่งเหนือชุมชนขามเรียง ห้อง 406, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2530000, 103.2441000),
-('มนัสวี', 'พูนทรัพย์', '0900000010', 'หอพักใกล้ถนนทางเข้ามหาวิทยาลัย ห้อง 203, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2545078, 103.2445734),
-('กิตติศักดิ์', 'ไชยรัตน์', '0900000011', 'บ้านเช่านักศึกษาฝั่งเหนือ มมส. ห้อง 02, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2528000, 103.2460000),
-('ณิชาภา', 'แสนคำ', '0900000012', 'หอพักนักศึกษาชุมชนขามเรียง ห้อง 208, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2507000, 103.2464000),
-('ปกรณ์', 'วงศ์สวัสดิ์', '0900000013', 'หอพักกุดรัง มมส. ห้อง 211, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2478000, 103.2468000),
-('สิริกานต์', 'คงมั่น', '0900000014', 'หอพักนักศึกษาฝั่งชุมชนขามเรียง ห้อง 307, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2493000, 103.2467000),
-('ธนภัทร', 'มีสุข', '0900000015', 'บ้านเช่านักศึกษาใกล้มหาวิทยาลัย ห้อง 03, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2485000, 103.2449000),
-('นันทิชา', 'ทองใบ', '0900000016', 'หอพักเดอะเบสท์ ห้อง 302, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2359123, 103.2560879),
-('ชยพล', 'แก้วคำ', '0900000017', 'หอพักนักศึกษาย่านท่าขอนยาง ห้อง 205, ต.ท่าขอนยาง อ.กันทรวิชัย จ.มหาสารคาม', 16.2367000, 103.2553000),
-('รินรดา', 'สุขเกษม', '0900000018', 'บ้านเช่านักศึกษาท่าขอนยาง ห้อง 01, ต.ท่าขอนยาง อ.กันทรวิชัย จ.มหาสารคาม', 16.2349000, 103.2557000),
-('ก้องภพ', 'ศรีอุดม', '0900000019', 'หอพักนักศึกษาฝั่งถนน มมส.ใหม่ ห้อง 404, ต.ท่าขอนยาง อ.กันทรวิชัย จ.มหาสารคาม', 16.2370000, 103.2571000),
-('ปาริชาติ', 'บุญส่ง', '0900000020', 'พีพีอพาร์ทเมนท์ ห้อง 308, ต.ท่าขอนยาง อ.กันทรวิชัย จ.มหาสารคาม', 16.2372539, 103.2634158),
-('เอกภพ', 'ศรีสะอาด', '0900000021', 'หอพักนักศึกษาชุมชนท่าขอนยาง ห้อง 202, ต.ท่าขอนยาง อ.กันทรวิชัย จ.มหาสารคาม', 16.2382000, 103.2623000),
-('วาสนา', 'แสงจันทร์', '0900000022', 'บ้านเช่านักศึกษาท่าขอนยาง ห้อง 02, ต.ท่าขอนยาง อ.กันทรวิชัย จ.มหาสารคาม', 16.2363000, 103.2620000),
-('ธีรภัทร', 'คงทอง', '0900000023', 'หอพักนักศึกษาฝั่งถนน มมส.-บ้านดอนยม ห้อง 306, ต.ท่าขอนยาง อ.กันทรวิชัย จ.มหาสารคาม', 16.2388000, 103.2642000),
-('สุภาวดี', 'มานะดี', '0900000024', 'บ้านเช่านักศึกษาชุมชนท่าขอนยาง ห้อง 03, ต.ท่าขอนยาง อ.กันทรวิชัย จ.มหาสารคาม', 16.2358000, 103.2648000),
-('กฤตภาส', 'จันทร์หอม', '0900000025', 'หอพักนักศึกษาด้านตะวันออกของชุมชนขามเรียง ห้อง 105, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2520000, 103.2520000),
-('ณัฐชา', 'ภักดี', '0900000026', 'อพาร์ตเมนต์นักศึกษาชุมชนขามเรียง ห้อง 210, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2532000, 103.2540000),
-('พีรวิชญ์', 'ทองคำ', '0900000027', 'บ้านเช่านักศึกษาด้านตะวันออกชุมชนขามเรียง ห้อง 04, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม', 16.2508000, 103.2580000);
+INSERT INTO
+    customers (
+        first_name,
+        last_name,
+        phone,
+        address,
+        latitude,
+        longitude
+    )
+VALUES (
+        'ธนกฤต',
+        'แสงทอง',
+        '0900000001',
+        'อรัญชัยแกรนด์ ห้อง 305, ถนนหน้า มมส. ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2408125,
+        103.2440625
+    ),
+    (
+        'พิมพ์ชนก',
+        'วัฒนชัย',
+        '0900000002',
+        'เจมส์บอนด์แมนชั่น ห้อง 204, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2420625,
+        103.2434375
+    ),
+    (
+        'ณัฐวุฒิ',
+        'คำดี',
+        '0900000003',
+        'หอพักนักศึกษาฝั่งตะวันตก มมส. ห้อง 202, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2415500,
+        103.2431000
+    ),
+    (
+        'ชลธิชา',
+        'ศรีสุข',
+        '0900000004',
+        'บ้านเช่านักศึกษาชุมชนขามเรียง ห้อง 01, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2399500,
+        103.2443500
+    ),
+    (
+        'ภาคิน',
+        'บุญมี',
+        '0900000005',
+        'หอพักนักศึกษาใกล้รั้ว มมส. ห้อง 106, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2428500,
+        103.2429500
+    ),
+    (
+        'กัญญารัตน์',
+        'อินทร์คำ',
+        '0900000006',
+        'อพาร์ตเมนต์ชุมชนขามเรียง ห้อง 301, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2418500,
+        103.2450500
+    ),
+    (
+        'ศุภกร',
+        'วิเศษวงศ์',
+        '0900000007',
+        'หอพักนักศึกษาซอยศรีสะอาด ห้อง 202, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2512369,
+        103.2432242
+    ),
+    (
+        'อรปรียา',
+        'มณีรัตน์',
+        '0900000008',
+        'หอพักนักศึกษาซอยศรีสะอาด ห้อง 305, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2520500,
+        103.2430000
+    ),
+    (
+        'วรเมธ',
+        'จันทร์ดี',
+        '0900000009',
+        'หอพักนักศึกษาฝั่งเหนือชุมชนขามเรียง ห้อง 406, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2530000,
+        103.2441000
+    ),
+    (
+        'มนัสวี',
+        'พูนทรัพย์',
+        '0900000010',
+        'หอพักใกล้ถนนทางเข้ามหาวิทยาลัย ห้อง 203, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2545078,
+        103.2445734
+    ),
+    (
+        'กิตติศักดิ์',
+        'ไชยรัตน์',
+        '0900000011',
+        'บ้านเช่านักศึกษาฝั่งเหนือ มมส. ห้อง 02, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2528000,
+        103.2460000
+    ),
+    (
+        'ณิชาภา',
+        'แสนคำ',
+        '0900000012',
+        'หอพักนักศึกษาชุมชนขามเรียง ห้อง 208, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2507000,
+        103.2464000
+    ),
+    (
+        'ปกรณ์',
+        'วงศ์สวัสดิ์',
+        '0900000013',
+        'หอพักกุดรัง มมส. ห้อง 211, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2478000,
+        103.2468000
+    ),
+    (
+        'สิริกานต์',
+        'คงมั่น',
+        '0900000014',
+        'หอพักนักศึกษาฝั่งชุมชนขามเรียง ห้อง 307, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2493000,
+        103.2467000
+    ),
+    (
+        'ธนภัทร',
+        'มีสุข',
+        '0900000015',
+        'บ้านเช่านักศึกษาใกล้มหาวิทยาลัย ห้อง 03, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2485000,
+        103.2449000
+    ),
+    (
+        'นันทิชา',
+        'ทองใบ',
+        '0900000016',
+        'หอพักเดอะเบสท์ ห้อง 302, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2359123,
+        103.2560879
+    ),
+    (
+        'ชยพล',
+        'แก้วคำ',
+        '0900000017',
+        'หอพักนักศึกษาย่านท่าขอนยาง ห้อง 205, ต.ท่าขอนยาง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2367000,
+        103.2553000
+    ),
+    (
+        'รินรดา',
+        'สุขเกษม',
+        '0900000018',
+        'บ้านเช่านักศึกษาท่าขอนยาง ห้อง 01, ต.ท่าขอนยาง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2349000,
+        103.2557000
+    ),
+    (
+        'ก้องภพ',
+        'ศรีอุดม',
+        '0900000019',
+        'หอพักนักศึกษาฝั่งถนน มมส.ใหม่ ห้อง 404, ต.ท่าขอนยาง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2370000,
+        103.2571000
+    ),
+    (
+        'ปาริชาติ',
+        'บุญส่ง',
+        '0900000020',
+        'พีพีอพาร์ทเมนท์ ห้อง 308, ต.ท่าขอนยาง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2372539,
+        103.2634158
+    ),
+    (
+        'เอกภพ',
+        'ศรีสะอาด',
+        '0900000021',
+        'หอพักนักศึกษาชุมชนท่าขอนยาง ห้อง 202, ต.ท่าขอนยาง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2382000,
+        103.2623000
+    ),
+    (
+        'วาสนา',
+        'แสงจันทร์',
+        '0900000022',
+        'บ้านเช่านักศึกษาท่าขอนยาง ห้อง 02, ต.ท่าขอนยาง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2363000,
+        103.2620000
+    ),
+    (
+        'ธีรภัทร',
+        'คงทอง',
+        '0900000023',
+        'หอพักนักศึกษาฝั่งถนน มมส.-บ้านดอนยม ห้อง 306, ต.ท่าขอนยาง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2388000,
+        103.2642000
+    ),
+    (
+        'สุภาวดี',
+        'มานะดี',
+        '0900000024',
+        'บ้านเช่านักศึกษาชุมชนท่าขอนยาง ห้อง 03, ต.ท่าขอนยาง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2358000,
+        103.2648000
+    ),
+    (
+        'กฤตภาส',
+        'จันทร์หอม',
+        '0900000025',
+        'หอพักนักศึกษาด้านตะวันออกของชุมชนขามเรียง ห้อง 105, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2520000,
+        103.2520000
+    ),
+    (
+        'ณัฐชา',
+        'ภักดี',
+        '0900000026',
+        'อพาร์ตเมนต์นักศึกษาชุมชนขามเรียง ห้อง 210, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2532000,
+        103.2540000
+    ),
+    (
+        'พีรวิชญ์',
+        'ทองคำ',
+        '0900000027',
+        'บ้านเช่านักศึกษาด้านตะวันออกชุมชนขามเรียง ห้อง 04, ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม',
+        16.2508000,
+        103.2580000
+    );
 
 -- Data-only validation: one store, 27 customers, other project tables remain empty.
 -- Also prevent duplicate/overlapping customer pins and ensure the full customer set is in store radius.
@@ -205,7 +464,125 @@ BEGIN
         round(minimum_customer_gap_km::numeric, 3);
 END;
 $$;
+-- ===== ORDERS SEED: จำลองออเดอร์เข้าพร้อมกัน 20-30 รายการ =====
+INSERT INTO
+    orders (
+        customer_id,
+        box_quantity,
+        order_date,
+        status
+    )
+VALUES (1, 2, CURRENT_DATE, 'PENDING'),
+    (2, 3, CURRENT_DATE, 'PENDING'),
+    (3, 1, CURRENT_DATE, 'PENDING'),
+    (4, 2, CURRENT_DATE, 'PENDING'),
+    (5, 3, CURRENT_DATE, 'PENDING'),
+    (6, 1, CURRENT_DATE, 'PENDING'),
+    (7, 2, CURRENT_DATE, 'PENDING'),
+    (8, 2, CURRENT_DATE, 'PENDING'),
+    (9, 3, CURRENT_DATE, 'PENDING'),
+    (
+        10,
+        1,
+        CURRENT_DATE,
+        'PENDING'
+    ),
+    (
+        11,
+        2,
+        CURRENT_DATE,
+        'PENDING'
+    ),
+    (
+        12,
+        3,
+        CURRENT_DATE,
+        'PENDING'
+    ),
+    (
+        13,
+        1,
+        CURRENT_DATE,
+        'PENDING'
+    ),
+    (
+        14,
+        2,
+        CURRENT_DATE,
+        'PENDING'
+    ),
+    (
+        15,
+        2,
+        CURRENT_DATE,
+        'PENDING'
+    ),
+    (
+        16,
+        3,
+        CURRENT_DATE,
+        'PENDING'
+    ),
+    (
+        17,
+        1,
+        CURRENT_DATE,
+        'PENDING'
+    ),
+    (
+        18,
+        2,
+        CURRENT_DATE,
+        'PENDING'
+    ),
+    (
+        19,
+        3,
+        CURRENT_DATE,
+        'PENDING'
+    ),
+    (
+        20,
+        1,
+        CURRENT_DATE,
+        'PENDING'
+    ),
+    (
+        21,
+        2,
+        CURRENT_DATE,
+        'PENDING'
+    ),
+    (1, 1, CURRENT_DATE, 'PENDING'),
+    (5, 2, CURRENT_DATE, 'PENDING'),
+    (
+        23,
+        3,
+        CURRENT_DATE,
+        'PENDING'
+    ),
+    (
+        25,
+        1,
+        CURRENT_DATE,
+        'PENDING'
+    );
 
+DO $$
+DECLARE
+    order_count INTEGER;
+    total_boxes INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO order_count FROM orders WHERE order_date = CURRENT_DATE;
+    SELECT COALESCE(SUM(box_quantity), 0) INTO total_boxes FROM orders WHERE order_date = CURRENT_DATE;
+
+    IF order_count < 20 OR order_count > 30 THEN
+        RAISE EXCEPTION 'จำนวนออเดอร์ไม่อยู่ในช่วง 20-30 ตามโจทย์: มี % รายการ', order_count;
+    END IF;
+
+    RAISE NOTICE 'สร้างออเดอร์สำเร็จ: % รายการ รวม % กล่อง', order_count, total_boxes;
+END;
+$$;
 -- Useful review query after the seed runs: inspect each customer distance from the store.
 SELECT c.customer_id, c.first_name, c.last_name, c.address,
        c.latitude, c.longitude,
