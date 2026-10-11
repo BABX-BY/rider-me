@@ -2,6 +2,7 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { Rider } from '../../model/rider.model';
 import { RiderWorkStop, RiderWorkSummary } from '../../model/rider-work.model';
 import { RiderAuthApi } from '../../services/api/rider-auth-api';
+import { RiderWorkApi } from '../../services/api/rider-work-api';
 
 @Component({
   selector: 'app-rider-work',
@@ -11,6 +12,7 @@ import { RiderAuthApi } from '../../services/api/rider-auth-api';
 })
 export class RiderWork implements OnInit {
   private readonly auth = inject(RiderAuthApi);
+  private readonly workApi = inject(RiderWorkApi);
 
   protected readonly rider = signal<Rider | null>(null);
   protected readonly loading = signal(true);
@@ -31,7 +33,7 @@ export class RiderWork implements OnInit {
   protected readonly hasStops = computed(() => this.work().stops.length > 0);
 
   ngOnInit(): void {
-    this.loadRider();
+    this.loadRiderAndWork();
   }
 
   protected openNavigation(stop: RiderWorkStop): void {
@@ -54,12 +56,17 @@ export class RiderWork implements OnInit {
     window.location.href = '/rider/login';
   }
 
-  private async loadRider(): Promise<void> {
+  private async loadRiderAndWork(): Promise<void> {
     try {
-      this.rider.set(await this.auth.getMe());
+      const [rider, work] = await Promise.all([
+        this.auth.getMe(),
+        this.workApi.getWork(this.auth.getToken()),
+      ]);
+      this.rider.set(rider);
+      this.work.set(work);
     } catch (error) {
-      console.error('ไม่สามารถโหลดข้อมูล Rider ได้:', error);
-      this.errorMessage.set('Session หมดอายุ กรุณาเข้าสู่ระบบใหม่');
+      console.error('ไม่สามารถโหลดข้อมูล Rider หรือใบงานได้:', error);
+      this.errorMessage.set('ไม่สามารถโหลดข้อมูลใบงานได้ กรุณาลองเข้าสู่ระบบใหม่');
     } finally {
       this.loading.set(false);
     }
