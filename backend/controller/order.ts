@@ -140,6 +140,25 @@ orderRouter.patch("/:id", async (req, res) => {
   }
 
   try {
+    const existingOrder = await pool.query(
+      `SELECT status FROM orders WHERE order_id = $1`,
+      [orderId],
+    );
+
+    if (existingOrder.rowCount === 0) {
+      res.status(404).json({
+        message: "ไม่พบรายการสั่งซื้อ",
+      });
+      return;
+    }
+
+    if (existingOrder.rows[0].status !== "PENDING") {
+      res.status(409).json({
+        message: "สามารถแก้ไขออเดอร์ได้เฉพาะที่มีสถานะ PENDING เท่านั้น",
+      });
+      return;
+    }
+
     const updateResult = await pool.query(
       `
       UPDATE orders
@@ -201,6 +220,25 @@ orderRouter.delete("/:id", async (req, res) => {
   }
 
   try {
+    const existingOrder = await pool.query(
+      `SELECT status FROM orders WHERE order_id = $1`,
+      [orderId],
+    );
+
+    if (existingOrder.rowCount === 0) {
+      res.status(404).json({
+        message: "ไม่พบรายการสั่งซื้อ",
+      });
+      return;
+    }
+
+    if (existingOrder.rows[0].status !== "PENDING") {
+      res.status(409).json({
+        message: "สามารถลบออเดอร์ได้เฉพาะที่มีสถานะ PENDING เท่านั้น",
+      });
+      return;
+    }
+
     const result = await pool.query(
       `
       DELETE FROM orders
