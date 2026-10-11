@@ -1,219 +1,248 @@
-<section class="space-y-4">
-  <div>
-    <h1 class="text-2xl font-bold">จัดการออเดอร์</h1>
-    <p class="text-base-content/70">ดูตำแหน่งจัดส่งและจัดการรายการสั่งซื้อ</p>
+<section class="space-y-6">
+  <!-- หัวหน้า -->
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-bold">จัดการออเดอร์</h1>
+      <p class="text-base-content/70">ดูและจัดการรายการสั่งซื้อข้าวกล่องประจำวัน</p>
+    </div>
+
+    <div class="flex gap-2">
+      <button
+        type="button"
+        class="btn btn-error btn-outline"
+        [disabled]="busy || orders().length === 0"
+        (click)="clearOrders()"
+      >
+        @if (clearingOrders()) {
+          <span class="loading loading-spinner loading-xs"></span>
+          กำลังล้าง...
+        } @else {
+          ล้างทั้งหมด
+        }
+      </button>
+
+      <button
+        type="button"
+        class="btn btn-primary"
+        [disabled]="busy || isFull()"
+        (click)="startAddingOrder()"
+      >
+        + เพิ่มออเดอร์
+      </button>
+    </div>
   </div>
 
-  <div class="grid min-h-[70vh] grid-cols-1 gap-4 lg:grid-cols-3">
-    <!-- พื้นที่แผนที่ทางซ้าย -->
-    <section
-      class="min-h-[60vh] overflow-hidden rounded-box border border-base-300 bg-base-200 lg:col-span-2"
+  <!-- สรุปตัวเลข -->
+  <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <div class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm">
+      <p class="text-sm text-base-content/70">ออเดอร์ทั้งหมด</p>
+      <p class="mt-1 text-3xl font-bold">
+        {{ orders().length }}<span class="text-lg font-normal text-base-content/50"> / {{ maxOrders }}</span>
+      </p>
+      <progress
+        class="progress progress-primary mt-2 w-full"
+        [value]="orders().length"
+        [max]="maxOrders"
+      ></progress>
+    </div>
+
+    <div class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm">
+      <p class="text-sm text-base-content/70">จำนวนกล่องรวม</p>
+      <p class="mt-1 text-3xl font-bold">{{ totalBoxes() }}<span class="text-lg font-normal text-base-content/50"> กล่อง</span></p>
+    </div>
+
+    <div class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm">
+      <p class="text-sm text-base-content/70">รอดำเนินการ</p>
+      <p class="mt-1 text-3xl font-bold text-warning">{{ pendingCount() }}<span class="text-lg font-normal text-base-content/50"> รายการ</span></p>
+    </div>
+  </div>
+
+  <!-- แจ้งเตือน -->
+  @if (notification(); as notice) {
+    <div
+      role="alert"
+      class="alert"
+      [class.alert-success]="notice.type === 'success'"
+      [class.alert-error]="notice.type === 'error'"
     >
-      <div #mapElement class="order-map"></div>
-    </section>
+      <span>{{ notice.message }}</span>
+      <button type="button" class="btn btn-ghost btn-xs" (click)="dismissNotification()">ปิด</button>
+    </div>
+  }
 
-    <!-- แผงจัดการออเดอร์ทางขวา -->
-    <aside class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm">
-      @if (notification(); as notice) {
-        <div
-          role="alert"
-          class="alert mb-4"
-          [class.alert-success]="notice.type === 'success'"
-          [class.alert-error]="notice.type === 'error'"
-        >
-          <span>{{ notice.message }}</span>
-        </div>
-      }
-
-      @if (addingOrder() || editingOrder()) {
-        <form class="mb-5 space-y-3" (ngSubmit)="addingOrder() ? createOrder() : saveOrder()">
-          @if (addingOrder()) {
-            <h2 class="text-lg font-semibold">เพิ่มออเดอร์</h2>
-          } @else if (editingOrder(); as order) {
-            <h2 class="text-lg font-semibold">แก้ไขออเดอร์ #{{ order.order_id }}</h2>
-          }
-
-          <label class="form-control">
-            <span class="label-text mb-1">ลูกค้า</span>
-            <select
-              class="select select-bordered w-full"
-              name="customer_id"
-              [(ngModel)]="form.customer_id"
-              [disabled]="!!editingOrder()"
-              required
-            >
-              <option [ngValue]="null" disabled>เลือกลูกค้า</option>
-              @for (customer of customers(); track customer.customer_id) {
-                <option [ngValue]="customer.customer_id">
-                  #{{ customer.customer_id }} {{ customer.first_name }} {{ customer.last_name }}
-                </option>
-              }
-            </select>
-          </label>
-
-          <label class="form-control">
-            <span class="label-text mb-1">จำนวนกล่อง</span>
-            <select
-              class="select select-bordered w-full"
-              name="box_quantity"
-              [(ngModel)]="form.box_quantity"
-              required
-            >
-              @for (n of boxOptions; track n) {
-                <option [ngValue]="n">{{ n }} กล่อง</option>
-              }
-            </select>
-          </label>
-
-          <div class="flex gap-2">
-            <button class="btn btn-primary flex-1" type="submit" [disabled]="savingOrder()">
-              @if (savingOrder()) {
-                กำลังบันทึก...
-              } @else if (addingOrder()) {
-                เพิ่มออเดอร์
-              } @else {
-                บันทึกการแก้ไข
-              }
-            </button>
-
-            <button
-              class="btn btn-ghost"
-              type="button"
-              [disabled]="savingOrder()"
-              (click)="cancelEditing()"
-            >
-              ยกเลิก
-            </button>
-          </div>
-        </form>
-      }
-
-      <div class="mb-3 flex items-center justify-between gap-2">
-        <h2 class="text-lg font-semibold">รายการสั่งซื้อ</h2>
-
-        <div class="flex items-center gap-2">
-          <span class="badge">{{ orders().length }}/{{ maxOrders }}</span>
-          <button
-            type="button"
-            class="btn btn-primary btn-sm"
-            [disabled]="busy || isFull()"
-            (click)="startAddingOrder()"
-          >
-            เพิ่มออเดอร์
-          </button>
-        </div>
+  <!-- ตารางออเดอร์ -->
+  <section class="overflow-hidden rounded-box border border-base-300 bg-base-100 shadow-sm">
+    @if (loading()) {
+      <div class="flex items-center justify-center gap-3 py-16 text-base-content/70">
+        <span class="loading loading-spinner"></span>
+        กำลังโหลดรายการสั่งซื้อ...
       </div>
-
-      <div class="mb-3 flex flex-wrap gap-2">
-        <button
-          type="button"
-          class="btn btn-outline btn-sm"
-          [class.btn-active]="pickingNearby()"
-          [disabled]="busy"
-          (click)="startPickingNearby()"
-        >
-          ค้นหาออเดอร์ใกล้จุดบนแผนที่ ({{ nearbyRadiusKm }} กม.)
-        </button>
-
-        @if (nearbyOrders()) {
-          <button type="button" class="btn btn-ghost btn-sm" (click)="showAllOrders()">
-            แสดงทั้งหมด
-          </button>
-        }
-
-        <button
-          type="button"
-          class="btn btn-error btn-outline btn-sm"
-          [disabled]="busy || orders().length === 0"
-          (click)="clearOrders()"
-        >
-          @if (clearingOrders()) {
-            กำลังล้าง...
-          } @else {
-            ล้างทั้งหมด
-          }
-        </button>
+    } @else if (errorMessage()) {
+      <p class="alert alert-error m-4">{{ errorMessage() }}</p>
+    } @else if (orders().length === 0) {
+      <div class="py-16 text-center">
+        <p class="text-lg font-semibold">ยังไม่มีออเดอร์</p>
+        <p class="mt-1 text-base-content/70">กด "เพิ่มออเดอร์" เพื่อเริ่มรับออเดอร์แรก</p>
       </div>
+    } @else {
+      <div class="overflow-x-auto">
+        <table class="table table-zebra">
+          <thead>
+            <tr class="text-base-content/70">
+              <th>#</th>
+              <th>ลูกค้า</th>
+              <th>ที่อยู่จัดส่ง</th>
+              <th class="text-center">จำนวน</th>
+              <th>วันที่สั่ง</th>
+              <th>สถานะ</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (order of orders(); track order.order_id) {
+              <tr class="hover">
+                <td class="font-mono text-base-content/70">{{ order.order_id }}</td>
 
-      @if (pickingNearby()) {
-        <p class="mb-3 text-sm text-primary">คลิกบนแผนที่เพื่อค้นหาออเดอร์ในรัศมี {{ nearbyRadiusKm }} กม.</p>
-      }
+                <td>
+                  <div class="flex items-center gap-3">
+                    <div class="avatar avatar-placeholder">
+                      <div class="w-9 rounded-full bg-primary/10 text-primary">
+                        <span>{{ order.customer_first_name.charAt(0) }}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div class="font-medium">
+                        {{ order.customer_first_name }} {{ order.customer_last_name }}
+                      </div>
+                      <div class="text-sm text-base-content/60">{{ order.customer_phone }}</div>
+                    </div>
+                  </div>
+                </td>
 
-      @if (loading()) {
-        <p class="py-4 text-center">กำลังโหลดรายการสั่งซื้อ...</p>
-      } @else if (errorMessage()) {
-        <p class="alert alert-error">{{ errorMessage() }}</p>
-      } @else {
-        <div class="max-h-[55vh] space-y-3 overflow-y-auto pr-1">
-          @for (order of visibleOrders(); track order.order_id) {
-            <article class="rounded-box border border-base-300 p-3">
-              <button
-                type="button"
-                class="block w-full cursor-pointer text-left"
-                (click)="focusOrder(order)"
-              >
-                <div class="flex items-center justify-between gap-2">
-                  <h3 class="font-semibold">ออเดอร์ #{{ order.order_id }}</h3>
+                <td class="max-w-xs whitespace-normal text-sm">{{ order.customer_address }}</td>
+
+                <td class="text-center">
+                  <span class="badge badge-outline">{{ order.box_quantity }} กล่อง</span>
+                </td>
+
+                <td class="whitespace-nowrap text-sm">{{ order.order_date | date: 'dd/MM/yyyy' }}</td>
+
+                <td>
                   <span class="badge" [class]="'badge ' + statusBadge(order.status)">
                     {{ statusLabel(order.status) }}
                   </span>
-                </div>
+                </td>
 
-                <p class="mt-2 text-sm">
-                  <span class="font-medium">ลูกค้า:</span>
-                  {{ order.customer_first_name }} {{ order.customer_last_name }}
-                  ({{ order.customer_phone }})
-                </p>
+                <td class="whitespace-nowrap text-right">
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    [disabled]="busy || !isPending(order)"
+                    [attr.title]="isPending(order) ? null : 'แก้ไขได้เฉพาะออเดอร์ที่รอดำเนินการ'"
+                    (click)="startEditing(order)"
+                  >
+                    แก้ไข
+                  </button>
 
-                <p class="mt-1 text-sm">
-                  <span class="font-medium">ที่อยู่:</span>
-                  {{ order.customer_address }}
-                </p>
-
-                <p class="mt-1 text-sm">
-                  <span class="font-medium">จำนวน:</span>
-                  {{ order.box_quantity }} กล่อง
-                  @if (order.distance_km !== undefined) {
-                    <span class="text-base-content/70">· ห่างจากจุดที่เลือก {{ order.distance_km.toFixed(2) }} กม.</span>
-                  }
-                </p>
-              </button>
-
-              <div class="mt-3 flex justify-end gap-2">
-                <button
-                  type="button"
-                  class="btn btn-outline btn-sm"
-                  [disabled]="busy || !isPending(order)"
-                  (click)="startEditing(order)"
-                >
-                  แก้ไข
-                </button>
-
-                <button
-                  type="button"
-                  class="btn btn-error btn-outline btn-sm"
-                  [disabled]="busy || !isPending(order)"
-                  (click)="deleteOrder(order)"
-                >
-                  @if (deletingOrderId() === order.order_id) {
-                    กำลังลบ...
-                  } @else {
-                    ลบออเดอร์
-                  }
-                </button>
-              </div>
-            </article>
-          } @empty {
-            <p class="py-4 text-center text-base-content/70">
-              @if (nearbyOrders()) {
-                ไม่พบออเดอร์ในรัศมี {{ nearbyRadiusKm }} กม.
-              } @else {
-                ยังไม่มีออเดอร์
-              }
-            </p>
-          }
-        </div>
-      }
-    </aside>
-  </div>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm text-error"
+                    [disabled]="busy || !isPending(order)"
+                    [attr.title]="isPending(order) ? null : 'ลบได้เฉพาะออเดอร์ที่รอดำเนินการ'"
+                    (click)="deleteOrder(order)"
+                  >
+                    @if (deletingOrderId() === order.order_id) {
+                      <span class="loading loading-spinner loading-xs"></span>
+                    } @else {
+                      ลบ
+                    }
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
 </section>
+
+<!-- หน้าต่างเพิ่ม/แก้ไขออเดอร์ -->
+@if (addingOrder() || editingOrder()) {
+  <dialog class="modal modal-open">
+    <div class="modal-box">
+      <form class="space-y-5" (ngSubmit)="addingOrder() ? createOrder() : saveOrder()">
+        @if (addingOrder()) {
+          <h2 class="text-xl font-semibold">เพิ่มออเดอร์</h2>
+        } @else if (editingOrder(); as order) {
+          <h2 class="text-xl font-semibold">แก้ไขออเดอร์ #{{ order.order_id }}</h2>
+        }
+
+        <label class="form-control w-full">
+          <span class="label-text mb-1">ลูกค้า</span>
+          <select
+            class="select select-bordered w-full"
+            name="customer_id"
+            [(ngModel)]="form.customer_id"
+            [disabled]="!!editingOrder()"
+            required
+          >
+            <option [ngValue]="null" disabled>เลือกลูกค้า</option>
+            @for (customer of customers(); track customer.customer_id) {
+              <option [ngValue]="customer.customer_id">
+                {{ customer.first_name }} {{ customer.last_name }} ({{ customer.phone }})
+              </option>
+            }
+          </select>
+        </label>
+
+        @if (selectedCustomer; as customer) {
+          <div class="rounded-box bg-base-200 p-3 text-sm">
+            <p><span class="font-medium">ที่อยู่:</span> {{ customer.address }}</p>
+          </div>
+        }
+
+        <div>
+          <span class="label-text mb-1 block">จำนวนกล่อง</span>
+          <div class="join w-full">
+            @for (n of boxOptions; track n) {
+              <button
+                type="button"
+                class="btn join-item flex-1"
+                [class.btn-primary]="form.box_quantity === n"
+                (click)="form.box_quantity = n"
+              >
+                {{ n }}
+              </button>
+            }
+          </div>
+          <p class="mt-1 text-xs text-base-content/60">สั่งได้ครั้งละ 1–3 กล่อง</p>
+        </div>
+
+        <div class="modal-action">
+          <button
+            class="btn btn-ghost"
+            type="button"
+            [disabled]="savingOrder()"
+            (click)="cancelEditing()"
+          >
+            ยกเลิก
+          </button>
+
+          <button class="btn btn-primary" type="submit" [disabled]="savingOrder()">
+            @if (savingOrder()) {
+              <span class="loading loading-spinner loading-xs"></span>
+              กำลังบันทึก...
+            } @else if (addingOrder()) {
+              เพิ่มออเดอร์
+            } @else {
+              บันทึกการแก้ไข
+            }
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <div class="modal-backdrop" (click)="cancelEditing()"></div>
+  </dialog>
+}
