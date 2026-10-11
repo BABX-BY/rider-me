@@ -1,5 +1,7 @@
-<app-header></app-header>
+@if (!isStandaloneRiderPage()) {
+  <app-header></app-header>
+}
 
-<main class="p-4">
+<main [class.p-4]="!isStandaloneRiderPage()">
   <router-outlet />
 </main>
