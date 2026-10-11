@@ -1,1 +1,219 @@
-<p>orders works!</p>
+<section class="space-y-4">
+  <div>
+    <h1 class="text-2xl font-bold">จัดการออเดอร์</h1>
+    <p class="text-base-content/70">ดูตำแหน่งจัดส่งและจัดการรายการสั่งซื้อ</p>
+  </div>
+
+  <div class="grid min-h-[70vh] grid-cols-1 gap-4 lg:grid-cols-3">
+    <!-- พื้นที่แผนที่ทางซ้าย -->
+    <section
+      class="min-h-[60vh] overflow-hidden rounded-box border border-base-300 bg-base-200 lg:col-span-2"
+    >
+      <div #mapElement class="order-map"></div>
+    </section>
+
+    <!-- แผงจัดการออเดอร์ทางขวา -->
+    <aside class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm">
+      @if (notification(); as notice) {
+        <div
+          role="alert"
+          class="alert mb-4"
+          [class.alert-success]="notice.type === 'success'"
+          [class.alert-error]="notice.type === 'error'"
+        >
+          <span>{{ notice.message }}</span>
+        </div>
+      }
+
+      @if (addingOrder() || editingOrder()) {
+        <form class="mb-5 space-y-3" (ngSubmit)="addingOrder() ? createOrder() : saveOrder()">
+          @if (addingOrder()) {
+            <h2 class="text-lg font-semibold">เพิ่มออเดอร์</h2>
+          } @else if (editingOrder(); as order) {
+            <h2 class="text-lg font-semibold">แก้ไขออเดอร์ #{{ order.order_id }}</h2>
+          }
+
+          <label class="form-control">
+            <span class="label-text mb-1">ลูกค้า</span>
+            <select
+              class="select select-bordered w-full"
+              name="customer_id"
+              [(ngModel)]="form.customer_id"
+              [disabled]="!!editingOrder()"
+              required
+            >
+              <option [ngValue]="null" disabled>เลือกลูกค้า</option>
+              @for (customer of customers(); track customer.customer_id) {
+                <option [ngValue]="customer.customer_id">
+                  #{{ customer.customer_id }} {{ customer.first_name }} {{ customer.last_name }}
+                </option>
+              }
+            </select>
+          </label>
+
+          <label class="form-control">
+            <span class="label-text mb-1">จำนวนกล่อง</span>
+            <select
+              class="select select-bordered w-full"
+              name="box_quantity"
+              [(ngModel)]="form.box_quantity"
+              required
+            >
+              @for (n of boxOptions; track n) {
+                <option [ngValue]="n">{{ n }} กล่อง</option>
+              }
+            </select>
+          </label>
+
+          <div class="flex gap-2">
+            <button class="btn btn-primary flex-1" type="submit" [disabled]="savingOrder()">
+              @if (savingOrder()) {
+                กำลังบันทึก...
+              } @else if (addingOrder()) {
+                เพิ่มออเดอร์
+              } @else {
+                บันทึกการแก้ไข
+              }
+            </button>
+
+            <button
+              class="btn btn-ghost"
+              type="button"
+              [disabled]="savingOrder()"
+              (click)="cancelEditing()"
+            >
+              ยกเลิก
+            </button>
+          </div>
+        </form>
+      }
+
+      <div class="mb-3 flex items-center justify-between gap-2">
+        <h2 class="text-lg font-semibold">รายการสั่งซื้อ</h2>
+
+        <div class="flex items-center gap-2">
+          <span class="badge">{{ orders().length }}/{{ maxOrders }}</span>
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            [disabled]="busy || isFull()"
+            (click)="startAddingOrder()"
+          >
+            เพิ่มออเดอร์
+          </button>
+        </div>
+      </div>
+
+      <div class="mb-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          class="btn btn-outline btn-sm"
+          [class.btn-active]="pickingNearby()"
+          [disabled]="busy"
+          (click)="startPickingNearby()"
+        >
+          ค้นหาออเดอร์ใกล้จุดบนแผนที่ ({{ nearbyRadiusKm }} กม.)
+        </button>
+
+        @if (nearbyOrders()) {
+          <button type="button" class="btn btn-ghost btn-sm" (click)="showAllOrders()">
+            แสดงทั้งหมด
+          </button>
+        }
+
+        <button
+          type="button"
+          class="btn btn-error btn-outline btn-sm"
+          [disabled]="busy || orders().length === 0"
+          (click)="clearOrders()"
+        >
+          @if (clearingOrders()) {
+            กำลังล้าง...
+          } @else {
+            ล้างทั้งหมด
+          }
+        </button>
+      </div>
+
+      @if (pickingNearby()) {
+        <p class="mb-3 text-sm text-primary">คลิกบนแผนที่เพื่อค้นหาออเดอร์ในรัศมี {{ nearbyRadiusKm }} กม.</p>
+      }
+
+      @if (loading()) {
+        <p class="py-4 text-center">กำลังโหลดรายการสั่งซื้อ...</p>
+      } @else if (errorMessage()) {
+        <p class="alert alert-error">{{ errorMessage() }}</p>
+      } @else {
+        <div class="max-h-[55vh] space-y-3 overflow-y-auto pr-1">
+          @for (order of visibleOrders(); track order.order_id) {
+            <article class="rounded-box border border-base-300 p-3">
+              <button
+                type="button"
+                class="block w-full cursor-pointer text-left"
+                (click)="focusOrder(order)"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <h3 class="font-semibold">ออเดอร์ #{{ order.order_id }}</h3>
+                  <span class="badge" [class]="'badge ' + statusBadge(order.status)">
+                    {{ statusLabel(order.status) }}
+                  </span>
+                </div>
+
+                <p class="mt-2 text-sm">
+                  <span class="font-medium">ลูกค้า:</span>
+                  {{ order.customer_first_name }} {{ order.customer_last_name }}
+                  ({{ order.customer_phone }})
+                </p>
+
+                <p class="mt-1 text-sm">
+                  <span class="font-medium">ที่อยู่:</span>
+                  {{ order.customer_address }}
+                </p>
+
+                <p class="mt-1 text-sm">
+                  <span class="font-medium">จำนวน:</span>
+                  {{ order.box_quantity }} กล่อง
+                  @if (order.distance_km !== undefined) {
+                    <span class="text-base-content/70">· ห่างจากจุดที่เลือก {{ order.distance_km.toFixed(2) }} กม.</span>
+                  }
+                </p>
+              </button>
+
+              <div class="mt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  class="btn btn-outline btn-sm"
+                  [disabled]="busy || !isPending(order)"
+                  (click)="startEditing(order)"
+                >
+                  แก้ไข
+                </button>
+
+                <button
+                  type="button"
+                  class="btn btn-error btn-outline btn-sm"
+                  [disabled]="busy || !isPending(order)"
+                  (click)="deleteOrder(order)"
+                >
+                  @if (deletingOrderId() === order.order_id) {
+                    กำลังลบ...
+                  } @else {
+                    ลบออเดอร์
+                  }
+                </button>
+              </div>
+            </article>
+          } @empty {
+            <p class="py-4 text-center text-base-content/70">
+              @if (nearbyOrders()) {
+                ไม่พบออเดอร์ในรัศมี {{ nearbyRadiusKm }} กม.
+              } @else {
+                ยังไม่มีออเดอร์
+              }
+            </p>
+          }
+        </div>
+      }
+    </aside>
+  </div>
+</section>
