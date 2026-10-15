@@ -12,7 +12,7 @@ app.use(
   cors({
     origin: [
       "http://localhost:4200",
-      "https://rider-frontend-sigma.vercel.app",
+      "https://rider-frontend-git-dev-mexw.vercel.app",
     ],
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
