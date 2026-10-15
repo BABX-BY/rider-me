@@ -4,6 +4,7 @@ const TOKEN_TTL_SECONDS = 12 * 60 * 60;
 
 interface RiderTokenPayload {
   riderId: number;
+  routePlanId: number;
   exp: number;
 }
 
@@ -23,9 +24,10 @@ function sign(content: string): string {
   return createHmac("sha256", getSessionSecret()).update(content).digest("base64url");
 }
 
-export function createRiderToken(riderId: number): string {
+export function createRiderToken(riderId: number, routePlanId: number): string {
   const payload: RiderTokenPayload = {
     riderId,
+    routePlanId,
     exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS,
   };
   const encodedPayload = encode(JSON.stringify(payload));
@@ -46,7 +48,7 @@ export function readRiderToken(token: string): RiderTokenPayload | null {
 
   try {
     const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as RiderTokenPayload;
-    if (!Number.isInteger(payload.riderId) || payload.exp <= Math.floor(Date.now() / 1000)) {
+    if (!Number.isInteger(payload.riderId) || !Number.isInteger(payload.routePlanId) || payload.exp <= Math.floor(Date.now() / 1000)) {
       return null;
     }
     return payload;

@@ -5,12 +5,8 @@ import { createRiderToken } from "../security/rider-session";
 
 export const riderAuthRouter = express.Router();
 
-function normalizePhone(value: unknown): string {
-  return typeof value === "string" ? value.replace(/\D/g, "") : "";
-}
-
-function normalizeVehiclePlate(value: unknown): string {
-  return typeof value === "string" ? value.trim().replace(/[\s-]/g, "").toUpperCase() : "";
+function normalizeWorksheetCode(value: unknown): string {
+  return typeof value === "string" ? value.trim().replace(/\s+/g, "").toUpperCase() : "";
 }
 
 async function getRider(riderId: number) {
@@ -25,45 +21,71 @@ async function getRider(riderId: number) {
   return result.rows[0] ?? null;
 }
 
-riderAuthRouter.post("/login", async (req, res) => {
-  const phone = normalizePhone(req.body?.phone);
-  const vehiclePlate = normalizeVehiclePlate(req.body?.vehiclePlate);
+riderAuthRouter.post("/worksheet", async (req, res) => {
+  const worksheetCode = normalizeWorksheetCode(req.body?.worksheetCode);
 
-  if (!phone || !vehiclePlate) {
-    res.status(400).json({ message: "กรุณากรอกเบอร์โทรและทะเบียนรถ" });
+  if (!worksheetCode) {
+    res.status(400).json({ message: "กรุณากรอกเลขใบงาน" });
     return;
   }
 
   try {
     const result = await pool.query(
       `
-        SELECT rider_id, name, phone, vehicle_plate, status, max_orders_per_route
-        FROM riders
-        WHERE regexp_replace(phone, '[^0-9]', '', 'g') = $1
-          AND regexp_replace(UPPER(vehicle_plate), '[[:space:]-]', '', 'g') = $2
+        SELECT
+          route_plan.route_plan_id,
+          rider.rider_id,
+          rider.name,
+          rider.phone,
+          rider.vehicle_plate,
+          rider.status AS rider_status,
+          rider.max_orders_per_route
+        FROM route_plans AS route_plan
+        INNER JOIN route_stops AS route_stop
+          ON route_stop.route_plan_id = route_plan.route_plan_id
+        INNER JOIN riders AS rider ON rider.rider_id = route_stop.rider_id
+        WHERE route_plan.worksheet_code = $1
+          AND route_plan.route_date = CURRENT_DATE
+          AND route_plan.status = 'SELECTED'
+        GROUP BY
+          route_plan.route_plan_id,
+          rider.rider_id,
+          rider.name,
+          rider.phone,
+          rider.vehicle_plate,
+          rider.status,
+          rider.max_orders_per_route
+        HAVING COUNT(DISTINCT route_stop.rider_id) = 1
       `,
-      [phone, vehiclePlate],
+      [worksheetCode],
     );
-    const rider = result.rows[0];
+    const worksheet = result.rows[0];
 
-    if (!rider) {
-      res.status(401).json({ message: "เบอร์โทรหรือทะเบียนรถไม่ถูกต้อง" });
+    if (!worksheet) {
+      res.status(401).json({ message: "เลขใบงานไม่ถูกต้อง" });
       return;
     }
 
-    if (rider.status === "INACTIVE") {
+    if (worksheet.rider_status === "INACTIVE") {
       res.status(403).json({ message: "Rider คนนี้ถูกปิดการใช้งาน" });
       return;
     }
 
     res.status(200).json({
-      rider,
-      token: createRiderToken(rider.rider_id),
+      rider: {
+        rider_id: worksheet.rider_id,
+        name: worksheet.name,
+        phone: worksheet.phone,
+        vehicle_plate: worksheet.vehicle_plate,
+        status: worksheet.rider_status,
+        max_orders_per_route: worksheet.max_orders_per_route,
+      },
+      token: createRiderToken(worksheet.rider_id, worksheet.route_plan_id),
       expiresInHours: 12,
     });
   } catch (error) {
-    console.error("Rider login failed:", error);
-    res.status(500).json({ message: "ไม่สามารถเข้าสู่ระบบ Rider ได้" });
+    console.error("Rider worksheet login failed:", error);
+    res.status(500).json({ message: "ไม่สามารถเข้าสู่ระบบด้วยเลขใบงานได้" });
   }
 });
 

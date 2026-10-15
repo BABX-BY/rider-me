@@ -11,9 +11,9 @@ export class RiderAuthApi {
   private readonly api = inject(Api);
   private readonly tokenKey = 'rider_token';
 
-  async login(phone: string, vehiclePlate: string): Promise<RiderLoginResponse> {
+  async loginByWorksheet(worksheetCode: string): Promise<RiderLoginResponse> {
     const response = await lastValueFrom(
-      this.http.post<RiderLoginResponse>(`${this.api.API_ENDPOINT}/rider/auth/login`, { phone, vehiclePlate }),
+      this.http.post<RiderLoginResponse>(`${this.api.API_ENDPOINT}/rider/auth/worksheet`, { worksheetCode }),
     );
     localStorage.setItem(this.tokenKey, response.token);
     return response;

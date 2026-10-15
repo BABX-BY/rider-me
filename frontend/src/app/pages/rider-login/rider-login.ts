@@ -1,6 +1,5 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { Rider } from '../../model/rider.model';
 import { RiderAuthApi } from '../../services/api/rider-auth-api';
 
 @Component({
@@ -13,9 +12,7 @@ export class RiderLogin implements OnInit {
   private readonly auth = inject(RiderAuthApi);
   private readonly router = inject(Router);
 
-  protected readonly phone = signal('');
-  protected readonly vehiclePlate = signal('');
-  protected readonly rider = signal<Rider | null>(null);
+  protected readonly worksheetCode = signal('');
   protected readonly loading = signal(false);
   protected readonly errorMessage = signal('');
 
@@ -25,25 +22,20 @@ export class RiderLogin implements OnInit {
     }
   }
 
-  protected setPhone(event: Event): void {
-    this.phone.set((event.target as HTMLInputElement).value);
-  }
-
-  protected setVehiclePlate(event: Event): void {
-    this.vehiclePlate.set((event.target as HTMLInputElement).value);
+  protected setWorksheetCode(event: Event): void {
+    this.worksheetCode.set((event.target as HTMLInputElement).value);
   }
 
   protected async login(): Promise<void> {
     this.errorMessage.set('');
-    if (!this.phone().trim() || !this.vehiclePlate().trim()) {
-      this.errorMessage.set('กรุณากรอกเบอร์โทรและทะเบียนรถ');
+    if (!this.worksheetCode().trim()) {
+      this.errorMessage.set('กรุณากรอกเลขใบงาน');
       return;
     }
 
     this.loading.set(true);
     try {
-      const response = await this.auth.login(this.phone(), this.vehiclePlate());
-      this.rider.set(response.rider);
+      await this.auth.loginByWorksheet(this.worksheetCode());
       await this.router.navigate(['/rider/work']);
     } catch (error) {
       console.error('Rider login failed:', error);
@@ -55,7 +47,6 @@ export class RiderLogin implements OnInit {
 
   protected logout(): void {
     this.auth.logout();
-    this.rider.set(null);
   }
 
   protected goToWork(): void {

@@ -52,11 +52,12 @@ riderRouter.get("/work", requireRiderToken, async (req: RiderSessionRequest, res
         INNER JOIN customers AS customer
           ON customer.customer_id = order_row.customer_id
         WHERE route_stop.rider_id = $1
+          AND route_plan.route_plan_id = $2
           AND route_plan.route_date = CURRENT_DATE
           AND route_plan.status = 'SELECTED'
         ORDER BY route_stop.stop_sequence
       `,
-      [req.riderId],
+      [req.riderId, req.routePlanId],
     );
 
     const rows = result.rows;

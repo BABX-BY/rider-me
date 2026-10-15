@@ -3,6 +3,7 @@ import { readRiderToken } from "../security/rider-session";
 
 export interface RiderSessionRequest extends Request {
   riderId?: number;
+  routePlanId?: number;
 }
 
 export function requireRiderToken(req: RiderSessionRequest, res: Response, next: NextFunction): void {
@@ -16,5 +17,6 @@ export function requireRiderToken(req: RiderSessionRequest, res: Response, next:
   }
 
   req.riderId = payload.riderId;
+  req.routePlanId = payload.routePlanId;
   next();
 }
