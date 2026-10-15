@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { readRiderToken } from "../security/rider-session";
+import { readRiderToken } from "../security/rider-session.js";
 
 export interface RiderSessionRequest extends Request {
   riderId?: number;

@@ -1,10 +1,10 @@
 import express from "express";
 import cors from "cors";
-import { router as index } from "./controller/index";
-import { customerRouter } from "./controller/customer";
-import { orderRouter } from "./controller/order";
-import { riderAuthRouter } from "./controller/rider-auth";
-import { riderRouter } from "./controller/rider";
+import { router as index } from "./controller/index.js";
+import { customerRouter } from "./controller/customer.js";
+import { orderRouter } from "./controller/order.js";
+import { riderAuthRouter } from "./controller/rider-auth.js";
+import { riderRouter } from "./controller/rider.js";
 
 export const app = express();
 

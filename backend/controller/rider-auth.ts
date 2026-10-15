@@ -1,7 +1,7 @@
 import express from "express";
-import { pool } from "../database/pool";
-import { RiderSessionRequest, requireRiderToken } from "../middleware/rider-session";
-import { createRiderToken } from "../security/rider-session";
+import { pool } from "../database/pool.js";
+import { RiderSessionRequest, requireRiderToken } from "../middleware/rider-session.js";
+import { createRiderToken } from "../security/rider-session.js";
 
 export const riderAuthRouter = express.Router();
 
