@@ -13,6 +13,7 @@ app.use(
     origin: [
       "http://localhost:4200",
       "https://rider-frontend-git-dev-mexw.vercel.app",
+      "https://rider-frontend-lnqh5yrr3-mexw.vercel.app",
     ],
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
