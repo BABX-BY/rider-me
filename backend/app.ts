@@ -22,3 +22,5 @@ app.use("/customers", customerRouter);
 app.use("/orders", orderRouter);
 app.use("/rider/auth", riderAuthRouter);
 app.use("/rider", riderRouter);
+
+export default app;
