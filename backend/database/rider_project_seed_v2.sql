@@ -582,6 +582,86 @@ VALUES (1, 2, CURRENT_DATE, 'PENDING'),
         'PENDING'
     );
 
+-- Sample route assignments for Rider worksheet testing.
+-- The worksheet code belongs to route_plans and each sample plan is assigned to one rider.
+INSERT INTO route_plans (
+    store_id,
+    route_date,
+    version,
+    status,
+    total_distance,
+    estimated_minutes,
+    total_cost,
+    total_revenue,
+    total_profit,
+    worksheet_code
+)
+VALUES
+    (1, CURRENT_DATE, 1, 'SELECTED', 1.80, 12, 36.00, 390.00, 354.00, 'WORK-R01-DEMO'),
+    (1, CURRENT_DATE, 1, 'SELECTED', 2.10, 15, 42.00, 390.00, 348.00, 'WORK-R02-DEMO'),
+    (1, CURRENT_DATE, 1, 'SELECTED', 1.60, 11, 33.00, 455.00, 422.00, 'WORK-R03-DEMO'),
+    (1, CURRENT_DATE, 1, 'SELECTED', 2.40, 17, 48.00, 390.00, 342.00, 'WORK-R04-DEMO'),
+    (1, CURRENT_DATE, 1, 'SELECTED', 1.50, 10, 30.00, 325.00, 295.00, 'WORK-R05-DEMO'),
+    (1, CURRENT_DATE, 1, 'SELECTED', 1.70, 12, 34.00, 260.00, 226.00, 'WORK-R06-DEMO'),
+    (1, CURRENT_DATE, 1, 'SELECTED', 2.20, 15, 44.00, 325.00, 281.00, 'WORK-R07-DEMO'),
+    (1, CURRENT_DATE, 1, 'SELECTED', 1.40, 10, 28.00, 195.00, 167.00, 'WORK-R08-DEMO'),
+    (1, CURRENT_DATE, 1, 'SELECTED', 1.30, 9, 26.00, 195.00, 169.00, 'WORK-R09-DEMO'),
+    (1, CURRENT_DATE, 1, 'SELECTED', 1.90, 13, 38.00, 260.00, 222.00, 'WORK-R10-DEMO');
+
+INSERT INTO route_stops (
+    route_plan_id,
+    rider_id,
+    order_id,
+    stop_sequence,
+    distance_from_previous,
+    estimated_arrival,
+    delivery_status
+)
+VALUES
+    (1, 1, 1, 1, 0.40, CURRENT_TIMESTAMP + INTERVAL '8 minutes', 'PENDING'),
+    (1, 1, 2, 2, 0.60, CURRENT_TIMESTAMP + INTERVAL '12 minutes', 'PENDING'),
+    (1, 1, 3, 3, 0.80, CURRENT_TIMESTAMP + INTERVAL '16 minutes', 'PENDING'),
+    (2, 2, 4, 1, 0.50, CURRENT_TIMESTAMP + INTERVAL '9 minutes', 'PENDING'),
+    (2, 2, 5, 2, 0.70, CURRENT_TIMESTAMP + INTERVAL '14 minutes', 'PENDING'),
+    (2, 2, 6, 3, 0.90, CURRENT_TIMESTAMP + INTERVAL '19 minutes', 'PENDING'),
+    (3, 3, 7, 1, 0.30, CURRENT_TIMESTAMP + INTERVAL '7 minutes', 'PENDING'),
+    (3, 3, 8, 2, 0.50, CURRENT_TIMESTAMP + INTERVAL '11 minutes', 'PENDING'),
+    (3, 3, 9, 3, 0.80, CURRENT_TIMESTAMP + INTERVAL '16 minutes', 'PENDING'),
+    (4, 4, 10, 1, 0.60, CURRENT_TIMESTAMP + INTERVAL '10 minutes', 'PENDING'),
+    (4, 4, 11, 2, 0.80, CURRENT_TIMESTAMP + INTERVAL '15 minutes', 'PENDING'),
+    (4, 4, 12, 3, 1.00, CURRENT_TIMESTAMP + INTERVAL '21 minutes', 'PENDING'),
+    (5, 5, 13, 1, 0.40, CURRENT_TIMESTAMP + INTERVAL '8 minutes', 'PENDING'),
+    (5, 5, 14, 2, 0.70, CURRENT_TIMESTAMP + INTERVAL '13 minutes', 'PENDING'),
+    (5, 5, 15, 3, 0.40, CURRENT_TIMESTAMP + INTERVAL '17 minutes', 'PENDING'),
+    (6, 6, 16, 1, 0.60, CURRENT_TIMESTAMP + INTERVAL '10 minutes', 'PENDING'),
+    (6, 6, 17, 2, 1.10, CURRENT_TIMESTAMP + INTERVAL '17 minutes', 'PENDING'),
+    (7, 7, 18, 1, 0.50, CURRENT_TIMESTAMP + INTERVAL '9 minutes', 'PENDING'),
+    (7, 7, 19, 2, 1.20, CURRENT_TIMESTAMP + INTERVAL '16 minutes', 'PENDING'),
+    (8, 8, 20, 1, 0.60, CURRENT_TIMESTAMP + INTERVAL '10 minutes', 'PENDING'),
+    (8, 8, 21, 2, 0.80, CURRENT_TIMESTAMP + INTERVAL '15 minutes', 'PENDING'),
+    (9, 9, 22, 1, 0.50, CURRENT_TIMESTAMP + INTERVAL '9 minutes', 'PENDING'),
+    (9, 9, 23, 2, 0.80, CURRENT_TIMESTAMP + INTERVAL '14 minutes', 'PENDING'),
+    (10, 10, 24, 1, 0.70, CURRENT_TIMESTAMP + INTERVAL '11 minutes', 'PENDING'),
+    (10, 10, 25, 2, 1.20, CURRENT_TIMESTAMP + INTERVAL '18 minutes', 'PENDING');
+
+DO $$
+DECLARE
+    route_plan_count INTEGER;
+    route_stop_count INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO route_plan_count FROM route_plans WHERE route_date = CURRENT_DATE;
+    SELECT COUNT(*) INTO route_stop_count FROM route_stops WHERE route_plan_id IN (
+        SELECT route_plan_id FROM route_plans WHERE route_date = CURRENT_DATE
+    );
+
+    IF route_plan_count <> 10 OR route_stop_count <> 25 THEN
+        RAISE EXCEPTION 'ตัวอย่างใบงานไม่ครบ: route_plans %, route_stops %', route_plan_count, route_stop_count;
+    END IF;
+
+    RAISE NOTICE 'สร้างข้อมูลตัวอย่างใบงานสำเร็จ: % ใบงาน, % จุดส่ง', route_plan_count, route_stop_count;
+END;
+$$;
+
 DO $$
 DECLARE
     order_count INTEGER;
