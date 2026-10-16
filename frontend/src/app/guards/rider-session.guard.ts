@@ -5,5 +5,5 @@ import { RiderAuthApi } from '../services/api/rider-auth-api';
 export const riderSessionGuard: CanActivateFn = () => {
   const auth = inject(RiderAuthApi);
   const router = inject(Router);
-  return auth.getToken() ? true : router.createUrlTree(['/rider/login']);
+  return auth.getWorksheetCode() ? true : router.createUrlTree(['/rider/login']);
 };

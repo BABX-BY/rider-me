@@ -9,10 +9,10 @@ export class RiderWorkApi {
   private readonly http = inject(HttpClient);
   private readonly api = inject(Api);
 
-  async getWork(token: string): Promise<RiderWorkSummary> {
+  async getWork(worksheetCode: string): Promise<RiderWorkSummary> {
     const response = await lastValueFrom(
       this.http.get<{ work: RiderWorkSummary }>(`${this.api.API_ENDPOINT}/rider/work`, {
-        headers: new HttpHeaders({ Authorization: `Bearer ${token}` }),
+        headers: new HttpHeaders({ 'x-worksheet-code': worksheetCode }),
       }),
     );
     return response.work;

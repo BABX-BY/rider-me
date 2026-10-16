@@ -17,7 +17,7 @@ export class RiderLogin implements OnInit {
   protected readonly errorMessage = signal('');
 
   ngOnInit(): void {
-    if (this.auth.getToken()) {
+    if (this.auth.getWorksheetCode()) {
       void this.router.navigate(['/rider/work']);
     }
   }

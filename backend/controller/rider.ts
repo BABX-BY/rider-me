@@ -1,6 +1,6 @@
 import express from "express";
 import { pool } from "../database/pool.js";
-import { RiderSessionRequest, requireRiderToken } from "../middleware/rider-session.js";
+import { RiderSessionRequest, requireWorksheet } from "../middleware/rider-session.js";
 
 export const riderRouter = express.Router();
 
@@ -25,7 +25,7 @@ riderRouter.get("/", async (_req, res) => {
   }
 });
 
-riderRouter.get("/work", requireRiderToken, async (req: RiderSessionRequest, res) => {
+riderRouter.get("/work", requireWorksheet, async (req: RiderSessionRequest, res) => {
   try {
     const result = await pool.query(
       `

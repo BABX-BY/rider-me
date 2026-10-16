@@ -60,7 +60,7 @@ export class RiderWork implements OnInit {
     try {
       const [rider, work] = await Promise.all([
         this.auth.getMe(),
-        this.workApi.getWork(this.auth.getToken()),
+        this.workApi.getWork(this.auth.getWorksheetCode()),
       ]);
       this.rider.set(rider);
       this.work.set(work);

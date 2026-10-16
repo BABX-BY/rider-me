@@ -9,13 +9,14 @@ import { RiderLoginResponse } from '../../model/rider-auth.model';
 export class RiderAuthApi {
   private readonly http = inject(HttpClient);
   private readonly api = inject(Api);
-  private readonly tokenKey = 'rider_token';
+  private readonly storageKey = 'rider_worksheet_code';
 
   async loginByWorksheet(worksheetCode: string): Promise<RiderLoginResponse> {
     const response = await lastValueFrom(
       this.http.post<RiderLoginResponse>(`${this.api.API_ENDPOINT}/rider/auth/worksheet`, { worksheetCode }),
     );
-    localStorage.setItem(this.tokenKey, response.token);
+    const code = response.worksheetCode || worksheetCode.trim().toUpperCase();
+    localStorage.setItem(this.storageKey, code);
     return response;
   }
 
@@ -29,14 +30,15 @@ export class RiderAuthApi {
   }
 
   logout(): void {
-    localStorage.removeItem(this.tokenKey);
+    localStorage.removeItem(this.storageKey);
   }
 
-  getToken(): string {
-    return localStorage.getItem(this.tokenKey) ?? '';
+  getWorksheetCode(): string {
+    return localStorage.getItem(this.storageKey) ?? '';
   }
 
   private authHeaders(): HttpHeaders {
-    return new HttpHeaders({ Authorization: `Bearer ${this.getToken()}` });
+    return new HttpHeaders({ 'x-worksheet-code': this.getWorksheetCode() });
   }
 }
+

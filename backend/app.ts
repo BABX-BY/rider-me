@@ -8,16 +8,25 @@ import { riderRouter } from "./controller/rider.js";
 
 export const app = express();
 
+const allowedOrigins = new Set([
+  "http://localhost:4200",
+  "https://rider-frontend-git-dev-mexw.vercel.app",
+  "https://rider-frontend-lnqh5yrr3-mexw.vercel.app",
+  "https://rider-frontend-na5pz18f2-mexw.vercel.app",
+]);
+
 app.use(
   cors({
-    origin: [
-      "http://localhost:4200",
-      "https://rider-frontend-git-dev-mexw.vercel.app",
-      "https://rider-frontend-lnqh5yrr3-mexw.vercel.app",
-      "https://rider-frontend-na5pz18f2-mexw.vercel.app",
-    ],
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error(`Origin is not allowed: ${origin}`));
+    },
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "x-worksheet-code"],
+    optionsSuccessStatus: 204,
   }),
 );
 
