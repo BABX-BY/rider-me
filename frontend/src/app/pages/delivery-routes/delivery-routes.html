@@ -1,1 +1,128 @@
-<p>delivery-routes works!</p>
+<section class="space-y-4">
+
+  <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h1 class="text-2xl font-bold">จัดเส้นทางจัดส่ง</h1>
+      <p class="text-base-content/70">คำนวณ จัดกลุ่มออเดอร์ และมอบหมายเส้นทางให้ไรเดอร์</p>
+    </div>
+
+    <div class="flex gap-2">
+      @if (!calculated()) {
+        <button class="btn btn-primary" [disabled]="loading()" (click)="calculate()">
+          @if (loading()) {
+            <span class="loading loading-spinner loading-sm"></span>
+          }
+          คำนวณเส้นทาง
+        </button>
+      } @else {
+        <button class="btn btn-outline" [disabled]="loading()" (click)="recalculate()">
+          @if (loading()) {
+            <span class="loading loading-spinner loading-sm"></span>
+          }
+          คำนวณใหม่
+        </button>
+        <button class="btn btn-success" [disabled]="loading() || confirmed()" (click)="confirmRoutes()">
+          ยืนยันและส่งงาน
+        </button>
+      }
+    </div>
+  </div>
+
+  <!-- การ์ดสรุปภาพรวม -->
+  <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+
+    <article class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm">
+      <p class="text-xs text-base-content/60 sm:text-sm">ออเดอร์รอจัดส่ง</p>
+      <p class="mt-2 text-3xl font-bold tracking-tight">{{ pendingOrders() }}</p>
+      <p class="mt-1 text-xs text-base-content/50">รายการ</p>
+    </article>
+
+    <article class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm">
+      <p class="text-xs text-base-content/60 sm:text-sm">กล่องรวม</p>
+      <p class="mt-2 text-3xl font-bold tracking-tight">{{ totalBoxes() }}</p>
+      <p class="mt-1 text-xs text-base-content/50">กล่อง</p>
+    </article>
+
+    <article class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm">
+      <p class="text-xs text-base-content/60 sm:text-sm">ไรเดอร์พร้อมวิ่ง</p>
+      <p class="mt-2 text-3xl font-bold tracking-tight">{{ availableRiders() }}</p>
+      <p class="mt-1 text-xs text-base-content/50">คน</p>
+    </article>
+
+    <article class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm">
+      <p class="text-xs text-base-content/60 sm:text-sm">สถานะ</p>
+      <p class="mt-2 text-lg font-bold tracking-tight">
+        @if (confirmed()) {
+          <span class="text-success">✅ ส่งงานแล้ว</span>
+        } @else if (calculated()) {
+          <span class="text-info">📋 พร้อมยืนยัน</span>
+        } @else {
+          <span class="text-warning">⏳ ยังไม่จัดเส้นทาง</span>
+        }
+      </p>
+    </article>
+
+  </div>
+
+  <!-- แผนที่ + แผงสรุปเส้นทาง -->
+  <div class="grid min-h-[65vh] grid-cols-1 gap-4 lg:grid-cols-3">
+
+    <!-- แผนที่ Leaflet (ครอง 2 ส่วนทางซ้าย) -->
+    <section
+      class="min-h-[50vh] overflow-hidden rounded-box border border-base-300 bg-base-200 lg:col-span-2"
+    >
+      <div #mapElement class="route-map"></div>
+    </section>
+
+    <!-- แผงสรุปเส้นทาง (ทางขวา) -->
+    <aside class="space-y-4">
+
+      <!-- สรุปการเงิน -->
+      <div class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm">
+        <h2 class="mb-3 text-base font-bold">สรุปการเงิน</h2>
+
+        <div class="space-y-2 text-sm">
+          <div class="flex justify-between">
+            <span class="text-base-content/70">รายได้ ({{ totalBoxes() }} กล่อง × 65 ฿)</span>
+            <span class="font-semibold text-success">{{ totalRevenue() | number }} ฿</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-base-content/70">ต้นทุนอาหาร (× 40 ฿)</span>
+            <span class="font-semibold text-error">-{{ totalFoodCost() | number }} ฿</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-base-content/70">ค่าจ้างไรเดอร์</span>
+            <span class="font-semibold text-error">-{{ totalDeliveryCost() | number }} ฿</span>
+          </div>
+          <div class="divider my-1"></div>
+          <div class="flex justify-between text-base font-bold">
+            <span>กำไรสุทธิ</span>
+            <span [class.text-success]="totalProfit() >= 0"
+                  [class.text-error]="totalProfit() < 0">
+              {{ totalProfit() | number }} ฿
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- รายการเส้นทางไรเดอร์ -->
+      <div class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm">
+        <h2 class="mb-3 text-base font-bold">เส้นทางไรเดอร์</h2>
+
+        @if (!calculated()) {
+          <div class="py-8 text-center text-sm text-base-content/50">
+            <p class="text-3xl">🗺️</p>
+            <p class="mt-2">กดปุ่ม "คำนวณเส้นทาง" เพื่อเริ่มจัดกลุ่มออเดอร์</p>
+          </div>
+        } @else {
+          <div class="py-8 text-center text-sm text-base-content/50">
+            <p>ผลการคำนวณจะแสดงที่นี่</p>
+          </div>
+        }
+      </div>
+
+    </aside>
+
+  </div>
+
+</section>
