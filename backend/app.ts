@@ -5,6 +5,8 @@ import { customerRouter } from "./controller/customer.js";
 import { orderRouter } from "./controller/order.js";
 import { riderAuthRouter } from "./controller/rider-auth.js";
 import { riderRouter } from "./controller/rider.js";
+import { routePlanRouter } from "./controller/route-plan.js";
+import { routeStopRouter } from "./controller/route-stop.js";
 
 export const app = express();
 
@@ -36,5 +38,7 @@ app.use("/customers", customerRouter);
 app.use("/orders", orderRouter);
 app.use("/rider/auth", riderAuthRouter);
 app.use("/rider", riderRouter);
+app.use("/route-plans", routePlanRouter);
+app.use("/route-stops", routeStopRouter);
 
 export default app;
