@@ -1,5 +1,5 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { RiderAuthApi } from '../../services/api/rider-auth-api';
 
 @Component({
@@ -11,6 +11,7 @@ import { RiderAuthApi } from '../../services/api/rider-auth-api';
 export class RiderLogin implements OnInit {
   private readonly auth = inject(RiderAuthApi);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   protected readonly worksheetCode = signal('');
   protected readonly loading = signal(false);
@@ -31,6 +32,11 @@ export class RiderLogin implements OnInit {
     if (!this.worksheetCode().trim()) {
       this.errorMessage.set('กรุณากรอกเลขใบงาน');
       return;
+    }
+
+    const worksheetCode = this.route.snapshot.queryParamMap.get('worksheetCode');
+    if (worksheetCode) {
+      this.worksheetCode.set(worksheetCode.trim().toUpperCase());
     }
 
     this.loading.set(true);

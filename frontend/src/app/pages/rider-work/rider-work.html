@@ -57,31 +57,27 @@
 
     } @else {
 
-    <!-- Welcome banner -->
-    <section class="relative overflow-hidden rounded-box bg-base-100 text-base-content shadow-sm">
-      <div class="relative z-10 flex flex-col gap-5 p-5 sm:p-7 lg:flex-row lg:items-center lg:justify-between lg:p-8">
-        <div class="min-w-0">
-          <p class="text-sm font-medium opacity-80">ภาพรวมการจัดส่งประจำวัน</p>
-          <h2 class="mt-2 text-2xl font-bold sm:text-3xl">
-            สวัสดี {{ rider()?.name || 'ไรเดอร์' }}
-          </h2>
-          <p class="mt-2 text-sm leading-6 opacity-80 sm:text-base">
-            ตรวจสอบใบงานและเดินทางไปยังจุดส่งได้จากที่นี่
-          </p>
+    <section class="rounded-box border border-base-300 bg-base-100 p-5 shadow-sm sm:p-6">
+      <p class="text-sm font-medium text-base-content/60">ภาพรวมการจัดส่งประจำวัน</p>
+      <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <p class="text-xs text-base-content/55">ไรเดอร์</p>
+          <p class="mt-1 font-bold">{{ rider()?.name || '-' }}</p>
         </div>
-
-        <div class="flex flex-col sm:flex-row items-center gap-2">
-          <div class="rounded-box bg-primary-content/15 px-4 py-2 text-sm">
-            {{ work().workDate || 'ยังไม่มีวันที่' }}
-          </div>
-          <div class="rounded-box bg-primary-content/15 px-4 py-2 text-sm">
-            {{ rider()?.vehicle_plate || 'ไม่พบทะเบียนรถ' }}
-          </div>
+        <div>
+          <p class="text-xs text-base-content/55">เลขใบงาน</p>
+          <p class="mt-1 font-bold">{{ worksheetCode || '-' }}</p>
         </div>
-      </div>
-
-      <div
-        class="pointer-events-none absolute -right-12 -top-16 size-48 rounded-full border-[28px] border-primary-content/5 sm:size-64">
+        <div>
+          <p class="text-xs text-base-content/55">วันที่</p>
+          <p class="mt-1 font-bold">{{ work().workDate || '-' }}</p>
+        </div>
+        <div>
+          <p class="text-xs text-base-content/55">เบอร์ร้านค้า</p>
+          <a class="mt-1 block font-bold text-primary" [href]="'tel:' + (work().storePhone || '')">
+            {{ work().storePhone || '-' }}
+          </a>
+        </div>
       </div>
     </section>
 
@@ -149,11 +145,16 @@
           </div>
         </div>
 
-        <button type="button" class="btn btn-outline w-full sm:w-auto" [disabled]="work().storeLatitude === null"
-          (click)="openStoreNavigation()">
-
-          นำทางกลับร้าน
-        </button>
+        <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <button type="button" class="btn btn-outline btn-sm w-full sm:w-auto"
+            [disabled]="work().stops.length === 0" (click)="toggleOverviewMap()">
+            {{ showOverviewMap() ? 'ซ่อนแผนที่ภาพรวม' : 'ดูแผนที่ภาพรวม' }}
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm w-full sm:w-auto" [disabled]="work().storeLatitude === null"
+            (click)="openStoreNavigation()">
+            เปิดเส้นทางกลับร้าน
+          </button>
+        </div>
       </div>
 
       @if (!hasStops()) {
@@ -170,6 +171,16 @@
       } @else {
 
       <div class="p-4 sm:p-6">
+
+        @if (showOverviewMap()) {
+        <div class="mb-6 overflow-hidden rounded-box border border-base-300">
+          <div class="border-b border-base-300 bg-base-200/60 px-4 py-3">
+            <h3 class="font-bold">แผนที่ภาพรวมใบงาน</h3>
+            <p class="mt-1 text-xs text-base-content/60">แสดงร้านและจุดส่งทั้งหมดตามลำดับใบงาน</p>
+          </div>
+          <div #overviewMap class="h-80 w-full sm:h-96"></div>
+        </div>
+        }
 
         <!-- Route list heading -->
         <div class="mb-4 flex items-center justify-between gap-3">
@@ -206,7 +217,7 @@
                   </div>
 
                   <span class="badge badge-outline w-fit shrink-0">
-                    {{ stop.status }}
+                    {{ statusLabel(stop.status) }}
                   </span>
                 </div>
 
@@ -217,12 +228,30 @@
                   <strong>{{ stop.boxes }}</strong>
                 </div>
 
+                <p class="mt-3 text-sm text-base-content/60">
+                  ถึงโดยประมาณใน {{ estimatedMinutesToStop($index) }} นาที
+                  <span class="text-xs">(คำนวณที่ความเร็ว 30 กม./ชม.)</span>
+                </p>
+
                 <!-- Navigation -->
                 <button type="button" class="btn btn-primary mt-4 min-h-11 w-full sm:w-auto"
                   [disabled]="stop.latitude === null" (click)="openNavigation(stop)">
                   <span aria-hidden="true">↗</span>
                   เปิดแผนที่นำทาง
                 </button>
+                <button type="button" class="btn btn-outline mt-2 min-h-11 w-full sm:ml-2 sm:mt-4 sm:w-auto"
+                  [disabled]="stop.latitude === null" (click)="showStopOnMap(stop)">
+                  {{ selectedStopSequence() === stop.sequence ? 'แสดงอยู่บนแผนที่' : 'ดูเส้นทางจุดนี้' }}
+                </button>
+
+                @if (selectedStopSequence() === stop.sequence) {
+                <div class="mt-4 overflow-hidden rounded-box border border-base-300">
+                  <div class="border-b border-base-300 bg-base-200/60 px-3 py-2 text-xs text-base-content/60">
+                    เส้นทางจากร้านไปยังจุดส่งที่ {{ stop.sequence }} · สี {{ routeColor(stop.sequence) }}
+                  </div>
+                  <div #orderMap class="h-72 w-full"></div>
+                </div>
+                }
 
               </div>
             </div>
