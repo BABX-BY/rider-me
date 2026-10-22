@@ -1,1 +1,207 @@
-<p>delivery-routes works!</p>
+<section class="space-y-4" aria-labelledby="page-title">
+  <header class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <h1 id="page-title" class="text-2xl font-bold">เส้นทางจัดส่ง</h1>
+      <p class="mt-1 text-base-content/70">วางแผนการส่งประจำวัน · 19 ต.ค. 2569</p>
+    </div>
+    <div class="flex gap-2">
+      <button type="button" class="btn btn-outline" disabled>คำนวณใหม่</button>
+      <button type="button" class="btn btn-primary" disabled>จัดเส้นทาง</button>
+    </div>
+  </header>
+
+  <div
+    class="flex flex-wrap items-center justify-between gap-2 text-sm text-base-content/60"
+    role="status"
+  >
+    <p>ข้อมูลตัวอย่าง · ยังไม่เชื่อมการคำนวณและบันทึกข้อมูล</p>
+    <button type="button" class="btn btn-ghost btn-xs" (click)="togglePreview()">
+      {{ previewMode() ? 'ดูแบบไม่มีข้อมูล' : 'แสดงตัวอย่าง' }}
+    </button>
+  </div>
+
+  <section
+    class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm"
+    aria-labelledby="review-title"
+  >
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 id="review-title" class="font-semibold">สรุปผลการจัดเส้นทาง</h2>
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="text-xs text-base-content/60">รอผลการคำนวณ</span>
+        <button type="button" class="btn btn-primary btn-outline btn-sm" disabled>
+          ยืนยันและส่งงานให้ไรเดอร์
+        </button>
+      </div>
+    </div>
+    <p class="mt-2 text-sm text-base-content/65">
+      {{ previewMode() ? '9 ออเดอร์ · 18 กล่อง · 3 ไรเดอร์' : 'ยังไม่มีข้อมูลออเดอร์' }}
+      <span class="mx-2 text-base-content/30" aria-hidden="true">|</span>
+      ออก 11:30 น. · ส่งถึงภายใน 12:30 น.
+    </p>
+    <dl class="result-grid mt-4 border-t border-base-200 pt-4">
+      <div>
+        <dt>ระยะทางรวม</dt>
+        <dd>— <small>กม.</small></dd>
+      </div>
+      <div>
+        <dt>เวลาจบรอบ</dt>
+        <dd>— <small>นาที</small></dd>
+      </div>
+      <div>
+        <dt>รายรับ</dt>
+        <dd>— <small>บาท</small></dd>
+      </div>
+      <div>
+        <dt>ต้นทุนรวม</dt>
+        <dd>— <small>บาท</small></dd>
+      </div>
+      <div>
+        <dt>กำไร / ขาดทุน</dt>
+        <dd>— <small>บาท</small></dd>
+      </div>
+      <div>
+        <dt>ค่าปรับคาดการณ์</dt>
+        <dd>— <small>บาท</small></dd>
+      </div>
+    </dl>
+  </section>
+
+  <div class="route-workspace">
+    <section
+      class="overflow-hidden rounded-box border border-base-300 bg-base-100"
+      aria-labelledby="map-title"
+    >
+      <div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+        <h2 id="map-title" class="font-semibold">แผนที่จัดส่ง</h2>
+        <span class="text-xs text-base-content/60">{{ store.name }} · ตัวอย่าง v1</span>
+      </div>
+      <app-route-map
+        [routes]="routes()"
+        [activeRouteId]="activeRouteId()"
+        [selectedStopId]="selectedStopId()"
+        (stopSelected)="selectStop($event)"
+      />
+    </section>
+
+    <aside
+      class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm"
+      aria-labelledby="legend-title"
+    >
+      <div class="mb-2 flex items-center justify-between gap-2">
+        <h2 id="legend-title" class="font-semibold">
+          ไรเดอร์
+          <span class="ml-1 text-sm font-normal text-base-content/50"
+            >{{ routes().length }} คน</span
+          >
+        </h2>
+        @if (previewMode()) {
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs"
+            [attr.aria-pressed]="activeRouteId() === null"
+            (click)="showAllRoutes()"
+          >
+            ดูทั้งหมด
+          </button>
+        }
+      </div>
+      @if (previewMode()) {
+        <div class="rider-list">
+          @for (route of routes(); track route.id) {
+            <article
+              class="rider-row"
+              [class.is-selected]="activeRouteId() === route.id"
+              [style.--route-color]="route.color"
+            >
+              <button
+                type="button"
+                class="rider-select"
+                [attr.aria-expanded]="activeRouteId() === route.id"
+                [attr.aria-controls]="
+                  activeRouteId() === route.id ? 'route-stops-' + route.id : null
+                "
+                (click)="selectRoute(route.id)"
+              >
+                <span class="rider-number">{{ route.id }}</span>
+                <span class="rider-name"
+                  ><strong>{{ route.name }}</strong
+                  ><small
+                    >{{ route.plate }} · {{ route.stops.length }} จุด ·
+                    {{ route.totalBoxes }} กล่อง</small
+                  ></span
+                >
+                <span class="text-base-content/50" aria-hidden="true">{{
+                  activeRouteId() === route.id ? '−' : '+'
+                }}</span>
+              </button>
+              <div class="rider-meta">
+                <span>{{ route.distanceKm }} กม. · {{ route.durationMinutes }} นาที</span
+                ><span>ส่งครบ {{ route.lastArrival }} น.</span>
+              </div>
+              @if (activeRouteId() === route.id) {
+                <ol class="stop-list" [id]="'route-stops-' + route.id">
+                  @for (stop of route.stops; track stop.id) {
+                    <li>
+                      <button
+                        type="button"
+                        [class.stop-selected]="selectedStopId() === stop.id"
+                        [attr.aria-pressed]="selectedStopId() === stop.id"
+                        (click)="selectStop(stop.id)"
+                      >
+                        <span class="stop-number">{{ stop.sequence }}</span>
+                        <span
+                          ><strong>{{ stop.customer }}</strong
+                          ><small>{{ stop.boxes }} กล่อง · ถึง {{ stop.eta }} น.</small
+                          ><small>{{ stop.address }}</small></span
+                        >
+                      </button>
+                    </li>
+                  }
+                  <li class="return-stop">↩ กลับร้าน</li>
+                </ol>
+              }
+            </article>
+          }
+        </div>
+        <p class="mt-3 text-xs text-base-content/50">เลือกไรเดอร์เพื่อดูเส้นทางและจุดส่ง</p>
+      } @else {
+        <div class="py-12 text-center text-sm text-base-content/60">
+          <p>ยังไม่มีเส้นทาง</p>
+          <button type="button" class="btn btn-ghost btn-sm mt-2" (click)="togglePreview()">
+            ดูตัวอย่าง
+          </button>
+        </div>
+      }
+    </aside>
+  </div>
+
+  <details class="rounded-box border border-base-300 bg-base-100">
+    <summary class="cursor-pointer px-4 py-3 text-sm font-medium">เงื่อนไขการจัดส่ง</summary>
+    <dl class="rules-grid px-4 pb-4 text-sm">
+      <div>
+        <dt>งานต่อไรเดอร์</dt>
+        <dd>ไม่เกิน 3 ออเดอร์ / 10 กล่อง</dd>
+      </div>
+      <div>
+        <dt>รัศมี / ความเร็ว</dt>
+        <dd>3 กม. / 30 กม.ต่อชม.</dd>
+      </div>
+      <div>
+        <dt>ราคาขาย / ต้นทุนอาหาร</dt>
+        <dd>65 / 40 บาทต่อกล่อง</dd>
+      </div>
+      <div>
+        <dt>ค่าเรียกไรเดอร์</dt>
+        <dd>15 บาทต่อคนต่อรอบ</dd>
+      </div>
+      <div>
+        <dt>ค่าระยะทาง</dt>
+        <dd>2 บาท × กม. × กล่องในรอบ</dd>
+      </div>
+      <div>
+        <dt>ค่าปรับ</dt>
+        <dd>20 บาทต่อออเดอร์ที่เลท</dd>
+      </div>
+    </dl>
+  </details>
+</section>

@@ -1,0 +1,51 @@
+:host {
+  display: block;
+}
+.route-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 1rem;
+  align-items: start;
+}
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1rem;
+}
+.result-grid dt,
+.rules-grid dt {
+  color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+  font-size: 0.875rem;
+}
+.result-grid dd {
+  margin-top: 0.4rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+.result-grid small {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: color-mix(in oklab, var(--color-base-content) 50%, transparent);
+}
+.rules-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+.rules-grid dd {
+  margin-top: 0.3rem;
+}
+@media (max-width: 1023px) {
+  .route-workspace {
+    grid-template-columns: 1fr;
+  }
+  .result-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 480px) {
+  .result-grid,
+  .rules-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
