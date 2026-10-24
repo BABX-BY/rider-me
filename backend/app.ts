@@ -15,6 +15,7 @@ const allowedOrigins = new Set([
   "https://rider-frontend-git-dev-mexw.vercel.app",
   "https://rider-frontend-lnqh5yrr3-mexw.vercel.app",
   "https://rider-frontend-na5pz18f2-mexw.vercel.app",
+  "https://frontend-rider-g9qxn2xoh-babx-by.vercel.app",
 ]);
 
 app.use(
