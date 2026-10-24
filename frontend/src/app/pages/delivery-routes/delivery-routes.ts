@@ -12,7 +12,9 @@ import { RouteApi, RoutePlanRecord, RouteStopRecord } from '../../services/api/r
 export class DeliveryRoutes {
   private readonly routeApi = inject(RouteApi);
   protected readonly loading = signal(true);
+  protected readonly generating = signal(false);
   protected readonly errorMessage = signal('');
+  protected readonly dataNotice = signal('');
   protected readonly activeRouteId = signal<number | null>(null);
   protected readonly selectedStopId = signal<number | null>(null);
   protected readonly store = signal<PreviewStore | null>(null);
@@ -46,11 +48,38 @@ export class DeliveryRoutes {
     }
   }
 
+  protected async generateRoutes(): Promise<void> {
+    this.generating.set(true);
+    this.errorMessage.set('');
+    try {
+      await this.routeApi.generateTodayRoutes();
+      await this.loadRoutes();
+    } catch (error) {
+      console.error('ไม่สามารถสร้างใบงานของวันนี้ได้:', error);
+      this.errorMessage.set('ไม่สามารถจัดเส้นทางของวันนี้ได้');
+    } finally {
+      this.generating.set(false);
+    }
+  }
+
   private async loadRoutes(): Promise<void> {
     this.loading.set(true);
     this.errorMessage.set('');
+    this.dataNotice.set('');
     try {
-      const plans = await this.routeApi.getRoutePlans(this.today());
+      let plans = await this.routeApi.getRoutePlans(this.today());
+      if (plans.length === 0) {
+        const availablePlans = await this.routeApi.getRoutePlans();
+        const latestDate = availablePlans[0]?.route_date;
+        plans = latestDate
+          ? availablePlans.filter((plan) => plan.route_date === latestDate)
+          : [];
+        if (plans.length > 0) {
+          this.dataNotice.set(
+            `ยังไม่มีใบงานของวันนี้ กำลังแสดงใบงานที่เลือกไว้วันที่ ${latestDate}`,
+          );
+        }
+      }
       const routeData = await Promise.all(
         plans.map(async (plan, index) => ({
           plan,

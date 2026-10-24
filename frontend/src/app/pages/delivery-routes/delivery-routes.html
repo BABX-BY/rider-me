@@ -6,7 +6,14 @@
     </div>
     <div class="flex gap-2">
       <button type="button" class="btn btn-outline" disabled>คำนวณใหม่</button>
-      <button type="button" class="btn btn-primary" disabled>จัดเส้นทาง</button>
+      <button
+        type="button"
+        class="btn btn-primary"
+        (click)="generateRoutes()"
+        [disabled]="loading() || generating()"
+      >
+        {{ generating() ? 'กำลังจัดเส้นทาง...' : 'จัดเส้นทาง' }}
+      </button>
     </div>
   </header>
 
@@ -15,6 +22,9 @@
     role="status"
   >
     <p>ข้อมูลจาก Backend · แผนเส้นทางที่เลือกในวันนี้</p>
+    @if (dataNotice()) {
+      <p class="text-warning">{{ dataNotice() }}</p>
+    }
     @if (loading()) {
       <span class="loading loading-spinner loading-sm" aria-label="กำลังโหลด"></span>
     }
@@ -73,7 +83,7 @@
     >
       <div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
         <h2 id="map-title" class="font-semibold">แผนที่จัดส่ง</h2>
-        <span class="text-xs text-base-content/60">{{ store()?.name || 'กำลังโหลดข้อมูลร้านค้า' }}</span>
+        <span class="text-xs text-base-content/60">{{ store()?.name || 'ยังไม่มีข้อมูลร้านค้า' }}</span>
       </div>
       <app-route-map
         [routes]="routes()"

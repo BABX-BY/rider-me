@@ -64,4 +64,10 @@ export class RouteApi {
       this.http.get<RouteStopRecord[]>(`${this.api.API_ENDPOINT}/route-stops`, { params }),
     );
   }
+
+  async generateTodayRoutes(): Promise<{ message: string }> {
+    return lastValueFrom(
+      this.http.post<{ message: string }>(`${this.api.API_ENDPOINT}/route-plans/generate`, {}),
+    );
+  }
 }
