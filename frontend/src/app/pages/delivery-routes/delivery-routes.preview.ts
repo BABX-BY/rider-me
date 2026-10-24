@@ -23,8 +23,18 @@ export interface PreviewRoute {
   stops: readonly PreviewStop[];
 }
 
+export interface PreviewStore {
+  name: string;
+  phone: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+}
+
 export const PREVIEW_STORE = {
   name: 'ร้านข้าวกล่องจำลอง มมส.',
+  phone: '',
+  address: '',
   latitude: 16.244335,
   longitude: 103.2494546,
 } as const;

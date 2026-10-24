@@ -14,7 +14,7 @@ import {
 } from '@angular/core';
 import * as L from 'leaflet';
 import { MAPTILER_API_KEY } from '../../config/map';
-import { PREVIEW_STORE, PreviewRoute } from './delivery-routes.preview';
+import { PreviewRoute, PreviewStore } from './delivery-routes.preview';
 
 @Component({
   selector: 'app-route-map',
@@ -24,6 +24,7 @@ import { PREVIEW_STORE, PreviewRoute } from './delivery-routes.preview';
 })
 export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
   @Input() routes: readonly PreviewRoute[] = [];
+  @Input() store: PreviewStore | null = null;
   @Input() activeRouteId: number | null = null;
   @Input() selectedStopId: number | null = null;
   @Output() readonly stopSelected = new EventEmitter<number>();
@@ -46,7 +47,7 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
   ngAfterViewInit(): void {
     this.map = L.map(this.mapElement.nativeElement, {
       scrollWheelZoom: true,
-    }).setView([PREVIEW_STORE.latitude, PREVIEW_STORE.longitude], 14);
+    }).setView(this.storePosition(), 14);
 
     const tiles = L.tileLayer(
       `https://api.maptiler.com/maps/streets-v4/{z}/{x}/{y}.png?key=${MAPTILER_API_KEY}`,
@@ -99,7 +100,7 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
 
   ngOnChanges(changes: SimpleChanges): void {
     if (!this.map) return;
-    if (changes['routes'] || changes['activeRouteId']) {
+    if (changes['routes'] || changes['activeRouteId'] || changes['store']) {
       this.renderRoutes();
       this.fitRoutes(this.visibleRoutes);
     } else if (changes['selectedStopId']) {
@@ -127,7 +128,7 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   private fitRoutes(routes: readonly PreviewRoute[]): void {
-    const positions: L.LatLngTuple[] = [[PREVIEW_STORE.latitude, PREVIEW_STORE.longitude]];
+    const positions: L.LatLngTuple[] = [this.storePosition()];
     for (const route of routes) {
       for (const stop of route.stops) {
         if (this.validPosition(stop.latitude, stop.longitude)) {
@@ -142,7 +143,7 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
     if (!this.map || !this.routeLayer) return;
     this.routeLayer.clearLayers();
     this.stopMarkers.clear();
-    const storePosition: L.LatLngTuple = [PREVIEW_STORE.latitude, PREVIEW_STORE.longitude];
+    const storePosition = this.storePosition();
 
     for (const route of this.visibleRoutes) {
       const stops = route.stops.filter((stop) => this.validPosition(stop.latitude, stop.longitude));
@@ -215,14 +216,25 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
         popupAnchor: [0, -25],
       }),
       keyboard: true,
-      title: `${PREVIEW_STORE.name} · จุดเริ่มต้นและจุดกลับ`,
+      title: `${this.store?.name ?? 'ร้านค้า'} · จุดเริ่มต้นและจุดกลับ`,
       zIndexOffset: 700,
     })
-      .bindPopup(this.createPopup(PREVIEW_STORE.name, ['จุดเริ่มต้นและจุดกลับของทุกเส้นทาง']))
+      .bindPopup(this.createPopup(this.store?.name ?? 'ร้านค้า', ['จุดเริ่มต้นและจุดกลับของทุกเส้นทาง']))
       .addTo(this.routeLayer);
     storeMarker
       .getElement()
-      ?.setAttribute('aria-label', `${PREVIEW_STORE.name} จุดเริ่มต้นและจุดกลับ`);
+      ?.setAttribute('aria-label', `${this.store?.name ?? 'ร้านค้า'} จุดเริ่มต้นและจุดกลับ`);
+  }
+
+  private storePosition(): L.LatLngTuple {
+    const latitude = Number(this.store?.latitude);
+    const longitude = Number(this.store?.longitude);
+    if (this.validPosition(latitude, longitude)) return [latitude, longitude];
+    const firstStop = this.routes.flatMap((route) => route.stops).find((stop) =>
+      this.validPosition(Number(stop.latitude), Number(stop.longitude)),
+    );
+    if (firstStop) return [Number(firstStop.latitude), Number(firstStop.longitude)];
+    return [0, 0];
   }
 
   private addDirection(start: L.LatLngTuple, end: L.LatLngTuple, color: string): void {

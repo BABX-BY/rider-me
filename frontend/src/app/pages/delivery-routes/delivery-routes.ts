@@ -1,6 +1,7 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { RouteMap } from './route-map';
-import { PREVIEW_ROUTES, PREVIEW_STORE } from './delivery-routes.preview';
+import { PreviewRoute, PreviewStop, PreviewStore } from './delivery-routes.preview';
+import { RouteApi, RoutePlanRecord, RouteStopRecord } from '../../services/api/route-api';
 
 @Component({
   selector: 'app-delivery-routes',
@@ -9,15 +10,22 @@ import { PREVIEW_ROUTES, PREVIEW_STORE } from './delivery-routes.preview';
   styleUrls: ['./delivery-routes.css', './route-legend.css'],
 })
 export class DeliveryRoutes {
-  protected readonly store = PREVIEW_STORE;
-  protected readonly previewMode = signal(true);
+  private readonly routeApi = inject(RouteApi);
+  protected readonly loading = signal(true);
+  protected readonly errorMessage = signal('');
   protected readonly activeRouteId = signal<number | null>(null);
   protected readonly selectedStopId = signal<number | null>(null);
-  protected readonly routes = computed(() => (this.previewMode() ? PREVIEW_ROUTES : []));
+  protected readonly store = signal<PreviewStore | null>(null);
+  protected readonly routes = signal<readonly PreviewRoute[]>([]);
+  protected readonly totalOrders = computed(() =>
+    this.routes().reduce((total, route) => total + route.stops.length, 0),
+  );
+  protected readonly totalBoxes = computed(() =>
+    this.routes().reduce((total, route) => total + route.totalBoxes, 0),
+  );
 
-  protected togglePreview(): void {
-    this.previewMode.update((visible) => !visible);
-    this.showAllRoutes();
+  constructor() {
+    void this.loadRoutes();
   }
 
   protected showAllRoutes(): void {
@@ -31,10 +39,89 @@ export class DeliveryRoutes {
   }
 
   protected selectStop(id: number): void {
-    const route = PREVIEW_ROUTES.find((item) => item.stops.some((stop) => stop.id === id));
-    if (route && this.previewMode()) {
+    const route = this.routes().find((item) => item.stops.some((stop) => stop.id === id));
+    if (route) {
       this.activeRouteId.set(route.id);
       this.selectedStopId.set(id);
     }
+  }
+
+  private async loadRoutes(): Promise<void> {
+    this.loading.set(true);
+    this.errorMessage.set('');
+    try {
+      const plans = await this.routeApi.getRoutePlans(this.today());
+      const routeData = await Promise.all(
+        plans.map(async (plan, index) => ({
+          plan,
+          stops: await this.routeApi.getRouteStops(plan.route_plan_id),
+          color: this.routeColor(index),
+        })),
+      );
+      this.routes.set(routeData.map(({ plan, stops, color }) => this.toPreviewRoute(plan, stops, color)));
+      const firstPlan = plans[0];
+      if (firstPlan) {
+        this.store.set({
+          name: firstPlan.store_name,
+          phone: firstPlan.store_phone,
+          address: firstPlan.store_address,
+          latitude: Number(firstPlan.store_latitude),
+          longitude: Number(firstPlan.store_longitude),
+        });
+      }
+    } catch (error) {
+      console.error('ไม่สามารถโหลดเส้นทางจัดส่งได้:', error);
+      this.errorMessage.set('ไม่สามารถโหลดข้อมูลเส้นทางจาก Backend ได้');
+      this.routes.set([]);
+      this.store.set(null);
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  private toPreviewRoute(
+    plan: RoutePlanRecord,
+    stops: readonly RouteStopRecord[],
+    color: string,
+  ): PreviewRoute {
+    const firstStop = stops[0];
+    const lastStop = stops[stops.length - 1];
+    return {
+      id: plan.route_plan_id,
+      name: firstStop?.rider_name ?? `ไรเดอร์ #${firstStop?.rider_id ?? '-'}`,
+      plate: firstStop?.vehicle_plate ?? '-',
+      color,
+      totalBoxes: stops.reduce((total, stop) => total + Number(stop.box_quantity || 0), 0),
+      distanceKm: Number(plan.total_distance || 0).toFixed(2),
+      durationMinutes: Number(plan.estimated_minutes || 0),
+      lastArrival: this.formatTime(lastStop?.estimated_arrival),
+      stops: stops.map((stop): PreviewStop => ({
+        id: stop.route_stop_id,
+        sequence: stop.stop_sequence,
+        customer: stop.customer_name,
+        address: stop.customer_address,
+        boxes: Number(stop.box_quantity || 0),
+        latitude: Number(stop.customer_latitude),
+        longitude: Number(stop.customer_longitude),
+        eta: this.formatTime(stop.estimated_arrival),
+      })),
+    };
+  }
+
+  private today(): string {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${now.getFullYear()}-${month}-${day}`;
+  }
+
+  private formatTime(value: string | null | undefined): string {
+    if (!value) return '-';
+    return new Date(value).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  private routeColor(index: number): string {
+    const colors = ['#d94c60', '#168568', '#4873cf', '#d28b25', '#8b5cf6', '#0891b2'];
+    return colors[index % colors.length];
   }
 }

@@ -20,6 +20,8 @@ routeStopRouter.get("/", async (req, res) => {
           route_stop.route_stop_id,
           route_stop.route_plan_id,
           route_stop.rider_id,
+          rider.name AS rider_name,
+          rider.vehicle_plate,
           route_stop.order_id,
           route_stop.stop_sequence,
           route_stop.distance_from_previous,
@@ -37,6 +39,8 @@ routeStopRouter.get("/", async (req, res) => {
         FROM route_stops AS route_stop
         INNER JOIN orders AS order_row
           ON order_row.order_id = route_stop.order_id
+        INNER JOIN riders AS rider
+          ON rider.rider_id = route_stop.rider_id
         INNER JOIN customers AS customer
           ON customer.customer_id = order_row.customer_id
         WHERE route_stop.route_plan_id = $1
@@ -67,6 +71,8 @@ routeStopRouter.get("/:id", async (req, res) => {
           route_stop.route_stop_id,
           route_stop.route_plan_id,
           route_stop.rider_id,
+          rider.name AS rider_name,
+          rider.vehicle_plate,
           route_stop.order_id,
           route_stop.stop_sequence,
           route_stop.distance_from_previous,
@@ -84,6 +90,8 @@ routeStopRouter.get("/:id", async (req, res) => {
         FROM route_stops AS route_stop
         INNER JOIN orders AS order_row
           ON order_row.order_id = route_stop.order_id
+        INNER JOIN riders AS rider
+          ON rider.rider_id = route_stop.rider_id
         INNER JOIN customers AS customer
           ON customer.customer_id = order_row.customer_id
         WHERE route_stop.route_stop_id = $1

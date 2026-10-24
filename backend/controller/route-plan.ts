@@ -22,8 +22,14 @@ routePlanRouter.get("/", async (req, res) => {
           total_revenue,
           total_profit,
           calculated_at,
-          worksheet_code
+          worksheet_code,
+          store.store_name,
+          store.phone AS store_phone,
+          store.address AS store_address,
+          store.latitude AS store_latitude,
+          store.longitude AS store_longitude
         FROM route_plans
+        INNER JOIN stores AS store ON store.store_id = route_plans.store_id
         WHERE ($1 = '' OR route_date = $1::date)
           AND ($2 = '' OR status = $2)
         ORDER BY route_date DESC, route_plan_id
@@ -61,8 +67,14 @@ routePlanRouter.get("/:id", async (req, res) => {
           total_revenue,
           total_profit,
           calculated_at,
-          worksheet_code
+          worksheet_code,
+          store.store_name,
+          store.phone AS store_phone,
+          store.address AS store_address,
+          store.latitude AS store_latitude,
+          store.longitude AS store_longitude
         FROM route_plans
+        INNER JOIN stores AS store ON store.store_id = route_plans.store_id
         WHERE route_plan_id = $1
       `,
       [routePlanId],
