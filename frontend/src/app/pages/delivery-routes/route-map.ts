@@ -37,6 +37,8 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
   private resizeObserver?: ResizeObserver;
   private readonly basemapAbort = new AbortController();
   private readonly stopMarkers = new Map<number, L.Marker>();
+  private readonly roadRoutes = new Map<number, L.LatLngTuple[]>();
+  private roadRequestId = 0;
 
   protected get visibleRoutes(): readonly PreviewRoute[] {
     return this.activeRouteId === null
@@ -91,6 +93,7 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
     this.routeLayer = L.layerGroup().addTo(this.map);
     this.renderRoutes();
     this.fitRoutes(this.visibleRoutes);
+    void this.loadRoadRoutes(this.visibleRoutes);
 
     this.resizeObserver = new ResizeObserver(() => {
       this.map?.invalidateSize({ pan: false });
@@ -103,6 +106,7 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
     if (changes['routes'] || changes['activeRouteId'] || changes['store']) {
       this.renderRoutes();
       this.fitRoutes(this.visibleRoutes);
+      void this.loadRoadRoutes(this.visibleRoutes);
     } else if (changes['selectedStopId']) {
       this.renderRoutes();
     }
@@ -121,6 +125,8 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
     this.map?.remove();
     this.map = undefined;
     this.stopMarkers.clear();
+    this.roadRoutes.clear();
+    this.roadRequestId += 1;
   }
 
   protected showAllRoutes(): void {
@@ -147,25 +153,15 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
 
     for (const route of this.visibleRoutes) {
       const stops = route.stops.filter((stop) => this.validPosition(stop.latitude, stop.longitude));
-      const positions: L.LatLngTuple[] = [
+      const straightPositions: L.LatLngTuple[] = [
         storePosition,
         ...stops.map((stop): L.LatLngTuple => [stop.latitude, stop.longitude]),
       ];
+      const positions = this.roadRoutes.get(route.id) ?? straightPositions;
       if (stops.length) {
         L.polyline(positions, { color: route.color, weight: 4, opacity: 0.8 }).addTo(
           this.routeLayer,
         );
-        for (let index = 1; index < positions.length; index++) {
-          this.addDirection(positions[index - 1], positions[index], route.color);
-        }
-        const lastPosition = positions[positions.length - 1];
-        L.polyline([lastPosition, storePosition], {
-          color: route.color,
-          weight: 3,
-          opacity: 0.65,
-          dashArray: '7 8',
-        }).addTo(this.routeLayer);
-        this.addDirection(lastPosition, storePosition, route.color);
       }
 
       for (const stop of stops) {
@@ -224,6 +220,55 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
     storeMarker
       .getElement()
       ?.setAttribute('aria-label', `${this.store?.name ?? 'ร้านค้า'} จุดเริ่มต้นและจุดกลับ`);
+  }
+
+  private async loadRoadRoutes(routes: readonly PreviewRoute[]): Promise<void> {
+    const requestId = ++this.roadRequestId;
+    const storePosition = this.storePosition();
+    this.roadRoutes.clear();
+
+    await Promise.all(
+      routes.map(async (route) => {
+        const stops = route.stops.filter((stop) =>
+          this.validPosition(stop.latitude, stop.longitude),
+        );
+        if (!stops.length) return;
+
+        const coordinates = [
+          storePosition,
+          ...stops.map((stop): L.LatLngTuple => [stop.latitude, stop.longitude]),
+          storePosition,
+        ]
+          .map(([latitude, longitude]) => `${longitude},${latitude}`)
+          .join(';');
+
+        try {
+          const response = await fetch(
+            `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=false`,
+          );
+          if (!response.ok) return;
+          const payload = (await response.json()) as {
+            code?: string;
+            routes?: Array<{ geometry?: { coordinates?: number[][] } }>;
+          };
+          const geometry = payload.routes?.[0]?.geometry?.coordinates;
+          if (payload.code !== 'Ok' || !geometry?.length) return;
+
+          const roadPositions = geometry
+            .filter((coordinate) => coordinate.length >= 2)
+            .map(([longitude, latitude]) => [latitude, longitude] as L.LatLngTuple)
+            .filter(([latitude, longitude]) => this.validPosition(latitude, longitude));
+          if (roadPositions.length > 1) this.roadRoutes.set(route.id, roadPositions);
+        } catch (error) {
+          console.warn(`ไม่สามารถหาเส้นทางตามถนนของ Route ${route.id} ได้`, error);
+        }
+      }),
+    );
+
+    if (this.map && requestId === this.roadRequestId) {
+      this.renderRoutes();
+      this.fitRoutes(this.visibleRoutes);
+    }
   }
 
   private storePosition(): L.LatLngTuple {
