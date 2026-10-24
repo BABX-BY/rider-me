@@ -237,7 +237,6 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
         const coordinates = [
           storePosition,
           ...stops.map((stop): L.LatLngTuple => [stop.latitude, stop.longitude]),
-          storePosition,
         ]
           .map(([latitude, longitude]) => `${longitude},${latitude}`)
           .join(';');
