@@ -13,11 +13,11 @@ import {
   signal,
 } from '@angular/core';
 import * as L from 'leaflet';
-import { MAPTILER_API_KEY } from '../../config/map';
+import { MAPTILER_API_KEY } from '../../../config/map';
 import { PreviewRoute, PreviewStore } from './delivery-routes.preview';
 
 @Component({
-  selector: 'app-route-map',
+  selector: 'app-saved-route-map',
   templateUrl: './route-map.html',
   styleUrl: './route-map.css',
   encapsulation: ViewEncapsulation.None,

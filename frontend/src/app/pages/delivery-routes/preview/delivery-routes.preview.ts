@@ -1,45 +1,12 @@
 // Presentation fixtures only. Never submit these records to the API or Neon.
 // Values, distances and ETAs are fixed examples, not optimizer output.
-export interface PreviewStop {
-  id: number;
-  sequence: number;
-  customer: string;
-  address: string;
-  boxes: number;
-  latitude: number;
-  longitude: number;
-  eta: string;
-}
+import type { RouteStopView, RouteView } from '../map/route-view';
 
-export interface PreviewRoute {
-  id: number;
-  name: string;
-  plate: string;
-  color: string;
-  totalBoxes: number;
-  distanceKm: string;
-  durationMinutes: number;
-  lastArrival: string;
-  revenue?: number;
-  cost?: number;
-  profit?: number;
-  deliveredStops?: number;
-  pendingStops?: number;
-  stops: readonly PreviewStop[];
-}
-
-export interface PreviewStore {
-  name: string;
-  phone: string;
-  address: string;
-  latitude: number;
-  longitude: number;
-}
+export type PreviewStop = RouteStopView;
+export type PreviewRoute = RouteView;
 
 export const PREVIEW_STORE = {
   name: 'ร้านข้าวกล่องจำลอง มมส.',
-  phone: '',
-  address: '',
   latitude: 16.244335,
   longitude: 103.2494546,
 } as const;
@@ -47,127 +14,166 @@ export const PREVIEW_STORE = {
 export const PREVIEW_ROUTES: readonly PreviewRoute[] = [
   {
     id: 1,
+    riderId: 1,
+    roundNumber: 1,
     name: 'ไรเดอร์ตัวอย่าง A',
     plate: 'ทด 1001',
     color: '#d94c60',
     totalBoxes: 6,
     distanceKm: '2.8',
     durationMinutes: 16,
+    departureTime: '11:30',
     lastArrival: '11:43',
+    returnTime: '11:46',
     stops: [
       {
         id: 101,
         sequence: 1,
         customer: 'ลูกค้าตัวอย่าง 01',
+        phone: '',
         address: 'หอพักฝั่งตะวันตก จุดสาธิต A1',
         boxes: 2,
         latitude: 16.24285,
         longitude: 103.24295,
         eta: '11:35',
+        isLate: false,
+        lateMinutes: 0,
       },
       {
         id: 102,
         sequence: 2,
         customer: 'ลูกค้าตัวอย่าง 02',
+        phone: '',
         address: 'ชุมชนขามเรียง จุดสาธิต A2',
         boxes: 1,
         latitude: 16.2420625,
         longitude: 103.2434375,
         eta: '11:39',
+        isLate: false,
+        lateMinutes: 0,
       },
       {
         id: 103,
         sequence: 3,
         customer: 'ลูกค้าตัวอย่าง 03',
+        phone: '',
         address: 'อรัญชัยแกรนด์ จุดสาธิต A3',
         boxes: 3,
         latitude: 16.2408125,
         longitude: 103.2440625,
         eta: '11:43',
+        isLate: false,
+        lateMinutes: 0,
       },
     ],
   },
   {
     id: 2,
+    riderId: 2,
+    roundNumber: 1,
     name: 'ไรเดอร์ตัวอย่าง B',
     plate: 'ทด 1002',
     color: '#168568',
     totalBoxes: 6,
     distanceKm: '3.4',
     durationMinutes: 19,
+    departureTime: '11:30',
     lastArrival: '11:46',
+    returnTime: '11:49',
     stops: [
       {
         id: 201,
         sequence: 1,
         customer: 'ลูกค้าตัวอย่าง 04',
+        phone: '',
         address: 'ย่านพักอาศัยทิศเหนือ จุดสาธิต B1',
         boxes: 3,
         latitude: 16.2492,
         longitude: 103.2471,
         eta: '11:36',
+        isLate: false,
+        lateMinutes: 0,
       },
       {
         id: 202,
         sequence: 2,
         customer: 'ลูกค้าตัวอย่าง 05',
+        phone: '',
         address: 'ย่านพักอาศัยทิศเหนือ จุดสาธิต B2',
         boxes: 2,
         latitude: 16.253,
         longitude: 103.2496,
         eta: '11:41',
+        isLate: false,
+        lateMinutes: 0,
       },
       {
         id: 203,
         sequence: 3,
         customer: 'ลูกค้าตัวอย่าง 06',
+        phone: '',
         address: 'ย่านพักอาศัยทิศเหนือ จุดสาธิต B3',
         boxes: 1,
         latitude: 16.2508,
         longitude: 103.2543,
         eta: '11:46',
+        isLate: false,
+        lateMinutes: 0,
       },
     ],
   },
   {
     id: 3,
+    riderId: 3,
+    roundNumber: 1,
     name: 'ไรเดอร์ตัวอย่าง C',
     plate: 'ทด 1003',
     color: '#4873cf',
     totalBoxes: 6,
     distanceKm: '4.2',
     durationMinutes: 22,
+    departureTime: '11:30',
     lastArrival: '11:49',
+    returnTime: '11:52',
     stops: [
       {
         id: 301,
         sequence: 1,
         customer: 'ลูกค้าตัวอย่าง 07',
+        phone: '',
         address: 'ย่านท่าขอนยาง จุดสาธิต C1',
         boxes: 1,
         latitude: 16.2425,
         longitude: 103.2562,
         eta: '11:37',
+        isLate: false,
+        lateMinutes: 0,
       },
       {
         id: 302,
         sequence: 2,
         customer: 'ลูกค้าตัวอย่าง 08',
+        phone: '',
         address: 'ย่านท่าขอนยาง จุดสาธิต C2',
         boxes: 3,
         latitude: 16.2391,
         longitude: 103.2605,
         eta: '11:43',
+        isLate: false,
+        lateMinutes: 0,
       },
       {
         id: 303,
         sequence: 3,
         customer: 'ลูกค้าตัวอย่าง 09',
+        phone: '',
         address: 'ย่านท่าขอนยาง จุดสาธิต C3',
         boxes: 2,
         latitude: 16.23661,
         longitude: 103.26338,
         eta: '11:49',
+        isLate: false,
+        lateMinutes: 0,
       },
     ],
   },

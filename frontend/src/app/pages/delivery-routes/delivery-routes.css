@@ -35,6 +35,73 @@
 .rules-grid dd {
   margin-top: 0.3rem;
 }
+.alternative-details {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-base-200);
+}
+.alternative-details > summary:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+.alternative-plans {
+  min-width: 0;
+  margin-top: 0.75rem;
+  padding: 0;
+  border: 0;
+}
+.alternative-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 0.75rem;
+}
+.alternative-card {
+  display: block;
+  min-width: 0;
+  padding: 0.875rem;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box);
+  cursor: pointer;
+}
+.alternative-card:hover {
+  background: var(--color-base-200);
+}
+.alternative-selected {
+  border-color: var(--color-primary);
+  background: color-mix(in oklab, var(--color-primary) 5%, var(--color-base-100));
+}
+.alternative-card:focus-within {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+.alternative-heading,
+.alternative-coverage {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.alternative-coverage {
+  margin-top: 0.65rem;
+  justify-content: space-between;
+}
+.alternative-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.65rem;
+  font-size: 0.75rem;
+}
+.alternative-metrics small {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+  font-size: 0.75rem;
+}
+.alternative-metrics strong {
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
 @media (max-width: 1023px) {
   .route-workspace {
     grid-template-columns: 1fr;

@@ -3,6 +3,25 @@ import { inject, Injectable } from '@angular/core';
 import { lastValueFrom } from 'rxjs';
 import { Api } from '../../config/api';
 
+export interface PlanningStoreResponse {
+  businessDate: string;
+  store: { store_id: number; store_name: string; latitude: number | string; longitude: number | string };
+}
+
+export interface SelectedPlanRequest {
+  routeDate: string;
+  storeId: number;
+  storeLatitude: number;
+  storeLongitude: number;
+  orders: { orderId: number; customerId: number; boxQuantity: number; latitude: number; longitude: number }[];
+  trips: { riderId: number; orderIds: number[] }[];
+}
+
+export interface ConfirmedPlanResponse {
+  message: string;
+  plans: { routePlanId: number; riderId: number; worksheetCode: string }[];
+}
+
 export interface RoutePlanRecord {
   route_plan_id: number;
   store_id: number;
@@ -65,10 +84,15 @@ export class RouteApi {
     );
   }
 
-  async generateTodayRoutes(regenerate = false): Promise<{ message: string }> {
-    const params = regenerate ? new HttpParams().set('regenerate', 'true') : undefined;
+  async getPlanningStore(): Promise<PlanningStoreResponse> {
     return lastValueFrom(
-      this.http.post<{ message: string }>(`${this.api.API_ENDPOINT}/route-plans/generate`, {}, { params }),
+      this.http.get<PlanningStoreResponse>(`${this.api.API_ENDPOINT}/route-plans/planning-store`),
+    );
+  }
+
+  async confirmSelectedPlan(plan: SelectedPlanRequest): Promise<ConfirmedPlanResponse> {
+    return lastValueFrom(
+      this.http.post<ConfirmedPlanResponse>(`${this.api.API_ENDPOINT}/route-plans/confirm`, plan),
     );
   }
 

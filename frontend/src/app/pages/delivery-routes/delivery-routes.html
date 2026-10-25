@@ -1,28 +1,46 @@
+<nav class="mb-4 flex flex-wrap gap-2" aria-label="มุมมองเส้นทางจัดส่ง">
+  <button type="button" class="btn btn-sm" [class.btn-primary]="view() === 'planning'" [attr.aria-pressed]="view() === 'planning'" [disabled]="busy()" (click)="view.set('planning')">วางแผนและเปรียบเทียบ</button>
+  <button type="button" class="btn btn-sm" [class.btn-primary]="view() === 'saved'" [attr.aria-pressed]="view() === 'saved'" [disabled]="busy()" (click)="view.set('saved')">ใบงานที่บันทึกแล้ว</button>
+</nav>
+@if (view() === 'saved') {
+  @if (confirmation(); as confirmed) {
+    <p class="mb-3 text-sm text-success" role="status">{{ confirmed.message }}</p>
+  }
+  <app-saved-delivery-routes (planCanceled)="onPlanCanceled()" />
+} @else {
+  <p class="mb-3 text-sm text-base-content/70">เลือกแผนแล้วกดยืนยัน เพื่อบันทึกลำดับจุดส่งเดียวกันเป็นใบงานให้ไรเดอร์</p>
 <section class="space-y-4" aria-labelledby="page-title">
   <header class="flex flex-wrap items-end justify-between gap-3">
     <div>
       <h1 id="page-title" class="text-2xl font-bold">เส้นทางจัดส่ง</h1>
-      <p class="mt-1 text-base-content/70">วางแผนการส่งประจำวัน</p>
+      <label class="mt-2 flex items-center gap-2 text-sm text-base-content/70">
+        วันที่จัดส่ง
+        <input
+          type="date"
+          class="input input-bordered input-sm"
+          [value]="selectedDate()"
+          [disabled]="busy()"
+          (change)="onPlanningDateChange($event)"
+        />
+      </label>
     </div>
     <div class="flex gap-2">
-      <button type="button" class="btn btn-outline" (click)="refreshRoutes()" [disabled]="loading() || generating()">
+      <button
+        type="button"
+        class="btn btn-outline"
+        [disabled]="busy()"
+        (click)="loadPlanningData()"
+      >
         โหลดข้อมูลใหม่
       </button>
+
       <button
         type="button"
         class="btn btn-primary"
-        (click)="generateRoutes()"
-        [disabled]="loading() || generating() || canceling()"
+        [disabled]="busy() || !preparedOrders() || !!confirmation()"
+        (click)="calculatePlan()"
       >
-        {{ generating() ? 'กำลังจัดเส้นทาง...' : (routes().length > 0 ? 'คำนวณใหม่' : 'จัดเส้นทาง') }}
-      </button>
-      <button
-        type="button"
-        class="btn btn-error btn-outline"
-        (click)="cancelTodayRoutes()"
-        [disabled]="loading() || generating() || canceling() || routes().length === 0"
-      >
-        {{ canceling() ? 'กำลังยกเลิก...' : 'ยกเลิกใบงานวันนี้' }}
+        {{ planResult() ? 'คำนวณใหม่' : 'จัดเส้นทาง' }}
       </button>
     </div>
   </header>
@@ -31,12 +49,26 @@
     class="flex flex-wrap items-center justify-between gap-2 text-sm text-base-content/60"
     role="status"
   >
-    <p>ข้อมูลจาก Backend · แผนเส้นทางที่เลือกในวันนี้</p>
-    @if (dataNotice()) {
-      <p class="text-warning">{{ dataNotice() }}</p>
-    }
-    @if (loading()) {
-      <span class="loading loading-spinner loading-sm" aria-label="กำลังโหลด"></span>
+    @if (dataLoading()) {
+      <p>กำลังโหลดออเดอร์และไรเดอร์...</p>
+    } @else if (dataError()) {
+      <p class="text-error" role="alert">
+        {{ dataError() }}
+        <button type="button" class="btn btn-ghost btn-xs" (click)="loadPlanningData()">
+          ลองอีกครั้ง
+        </button>
+      </p>
+    } @else if (preparedOrders(); as data) {
+      <p>
+        ออเดอร์พร้อมจัด {{ data.items.length }} รายการ · ไรเดอร์ว่าง
+        {{ availableRiders().length }} คน
+        @if (data.rejected.length > 0) {
+          <span class="text-warning"> · ต้องตรวจสอบ {{ data.rejected.length }} ออเดอร์ </span>
+        }
+        @if (planResult()) {
+          · แสดงผลของแผนที่เลือก
+        }
+      </p>
     }
   </div>
 
@@ -44,46 +76,226 @@
     class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm"
     aria-labelledby="review-title"
   >
+    @let plan = planResult();
+    @let totals = plan?.summary;
+
     <div class="flex flex-wrap items-center justify-between gap-3">
       <h2 id="review-title" class="font-semibold">สรุปผลการจัดเส้นทาง</h2>
+
       <div class="flex flex-wrap items-center gap-3">
-        <span class="text-xs text-base-content/60">ข้อมูลจาก Backend</span>
-        <button type="button" class="btn btn-primary btn-outline btn-sm" disabled>
-          ยืนยันและส่งงานให้ไรเดอร์
+        <span class="text-xs text-base-content/60">
+          @if (totals) {
+            แผน {{ selectedAlternativeNumber() }} · {{ confirmation() ? 'ยืนยันและบันทึกแล้ว' : 'ยังไม่ได้บันทึก' }}
+          } @else {
+            รอผลการคำนวณ
+          }
+        </span>
+
+        <button type="button" class="btn btn-primary btn-outline btn-sm" [disabled]="!canConfirm()" (click)="confirmPlan()">
+          {{ saving() ? 'กำลังบันทึก...' : (confirmation() ? 'บันทึกแล้ว' : 'ยืนยันและส่งงานให้ไรเดอร์') }}
         </button>
       </div>
     </div>
+
+    @if (alternativeMessage()) {
+      <p class="mt-3 text-sm text-base-content/70" role="status">
+        {{ alternativeMessage() }}
+      </p>
+    }
+
     <p class="mt-2 text-sm text-base-content/65">
-      {{ totalOrders() }} ออเดอร์ · {{ totalBoxes() }} กล่อง · {{ routes().length }} ไรเดอร์
+      @if (totals) {
+        {{ totals.assignedOrderCount }} ออเดอร์ · {{ totals.assignedBoxCount }} กล่อง ·
+        {{ totals.usedRiderCount }} ไรเดอร์ · {{ totals.tripCount }} รอบ
+      } @else {
+        กดจัดเส้นทางเพื่อคำนวณงานของวันที่เลือก
+      }
+
       <span class="mx-2 text-base-content/30" aria-hidden="true">|</span>
       ออก 11:30 น. · ส่งถึงภายใน 12:30 น.
     </p>
+
+    <p class="mt-1 text-xs text-base-content/60">ร้านจากฐานข้อมูล: {{ store()?.name || 'กำลังโหลดร้าน...' }}</p>
+
+    @if (saveError()) {
+      <p class="mt-3 text-sm text-error" role="alert">{{ saveError() }}</p>
+    }
+    @if (plan && selectedDate() !== businessDate()) {
+      <p class="mt-2 text-sm text-warning">วันอื่นใช้ทดลองคำนวณได้ การยืนยันใบงานใช้ได้เฉพาะวันที่ {{ businessDate() }} ตามเวลาร้าน</p>
+    }
+    @if (planError()) {
+      <p class="mt-3 text-sm text-error" role="alert">
+        {{ planError() }}
+      </p>
+    }
+
     <dl class="result-grid mt-4 border-t border-base-200 pt-4">
       <div>
         <dt>ระยะทางรวม</dt>
-        <dd>{{ totalDistance() | number:'1.2-2' }} <small>กม.</small></dd>
+        <dd>
+          {{ totals ? (totals.totalDistanceKm | number: '1.2-2') : '—' }}
+          <small>กม.</small>
+        </dd>
       </div>
+
       <div>
-        <dt>เวลาจบรอบ</dt>
-        <dd>{{ totalDuration() }} <small>นาที</small></dd>
+        <dt>เวลารวมจนกลับร้าน</dt>
+        <dd>
+          {{
+            totals && totals.returnMinute !== null ? (totals.elapsedMinutes | number: '1.1-1') : '—'
+          }}
+          <small>นาที</small>
+        </dd>
       </div>
+
       <div>
         <dt>รายรับ</dt>
-        <dd>{{ totalRevenue() | number:'1.2-2' }} <small>บาท</small></dd>
+        <dd>
+          {{ totals ? (totals.totalRevenue | number: '1.2-2') : '—' }}
+          <small>บาท</small>
+        </dd>
       </div>
+
       <div>
         <dt>ต้นทุนรวม</dt>
-        <dd>{{ totalCost() | number:'1.2-2' }} <small>บาท</small></dd>
+        <dd>
+          {{ totals ? (totals.totalCost | number: '1.2-2') : '—' }}
+          <small>บาท</small>
+        </dd>
       </div>
+
       <div>
         <dt>กำไร / ขาดทุน</dt>
-        <dd>{{ totalProfit() | number:'1.2-2' }} <small>บาท</small></dd>
+        <dd [class.text-error]="totals && totals.profit < 0">
+          {{ totals ? (totals.profit | number: '1.2-2') : '—' }}
+          <small>บาท</small>
+        </dd>
       </div>
+
       <div>
         <dt>ค่าปรับคาดการณ์</dt>
-        <dd>— <small>บาท</small></dd>
+        <dd>
+          {{ totals ? (totals.estimatedPenalty | number: '1.2-2') : '—' }}
+          <small>บาท</small>
+        </dd>
       </div>
     </dl>
+
+    @if (planAlternatives().length > 1) {
+      <details class="alternative-details">
+        <summary class="cursor-pointer text-sm font-medium">
+          เปรียบเทียบ {{ planAlternatives().length }} แผน
+        </summary>
+        <fieldset class="alternative-plans" [disabled]="busy() || !!confirmation()">
+          <legend class="sr-only">เลือกแผนการจัดส่ง</legend>
+          <p class="mt-1 text-xs text-base-content/60">
+            แผนทั้งหมดใช้ข้อมูลชุดเดียวกัน โหลดข้อมูลใหม่เพื่อใช้ออเดอร์และไรเดอร์ล่าสุด
+            @if (planAlternatives().length > 1) {
+              · กดคำนวณใหม่เพื่อดูแผนถัดไป
+            }
+          </p>
+          <p class="mt-1 text-xs text-base-content/60">
+            แนะนำในชุดนี้จากการจัดงานได้มาก ส่งช้าน้อย และกำไรสูง · ต้นทุนรวมค่าปรับคาดการณ์แล้ว
+          </p>
+          <div class="alternative-grid mt-3">
+            @for (alternative of planAlternatives(); track alternative.id) {
+              @let candidate = alternative.result.summary;
+              <label
+                class="alternative-card"
+                [class.alternative-selected]="selectedAlternativeId() === alternative.id"
+              >
+                <span class="alternative-heading">
+                  <input
+                    type="radio"
+                    name="route-plan-alternative"
+                    class="radio radio-primary radio-sm"
+                    [value]="alternative.id"
+                    [checked]="selectedAlternativeId() === alternative.id"
+                    (change)="selectAlternative(alternative.id)"
+                  />
+                  <strong class="text-sm font-medium">แผน {{ $index + 1 }}</strong>
+                  @if ($first) {
+                    <span class="badge badge-primary badge-outline badge-sm">แนะนำ</span>
+                  }
+                </span>
+                <span class="alternative-coverage text-xs">
+                  <span>
+                    จัดได้ {{ candidate.assignedOrderCount }}/{{
+                      candidate.assignedOrderCount + candidate.unassignedOrderCount
+                    }}
+                    ออเดอร์
+                  </span>
+                  <span [class.text-warning]="candidate.lateOrderCount > 0">
+                    คาดว่าส่งช้า {{ candidate.lateOrderCount }} ออเดอร์
+                  </span>
+                </span>
+                <span class="alternative-metrics">
+                  <span>
+                    <small>ต้นทุนรวม</small>
+                    <strong>{{ candidate.totalCost | number: '1.2-2' }}</strong> บาท
+                  </span>
+                  <span>
+                    <small>กำไร / ขาดทุน</small>
+                    <strong [class.text-error]="candidate.profit < 0">{{
+                      candidate.profit | number: '1.2-2'
+                    }}</strong>
+                    บาท
+                  </span>
+                  <span>
+                    <small>ระยะทางรวม</small>
+                    <strong>{{ candidate.totalDistanceKm | number: '1.2-2' }}</strong> กม.
+                  </span>
+                  <span>
+                    <small>เวลาจนกลับร้าน</small>
+                    <strong>{{
+                      candidate.returnMinute !== null
+                        ? (candidate.elapsedMinutes | number: '1.1-1')
+                        : '—'
+                    }}</strong>
+                    นาที
+                  </span>
+                </span>
+              </label>
+            }
+          </div>
+        </fieldset>
+      </details>
+    }
+
+    @if (plan) {
+      <p class="mt-3 text-xs text-base-content/60">ต้นทุนรวมมีค่าปรับคาดการณ์รวมอยู่แล้ว</p>
+
+      @for (warning of plan.warnings; track $index) {
+        <p class="mt-2 text-sm text-warning" role="status">
+          {{ warning }}
+        </p>
+      }
+
+      @if (plan.unassignedOrders.length > 0) {
+        <p class="mt-2 text-sm">
+          ออเดอร์ที่ยังจัดไม่ได้:
+          @for (order of plan.unassignedOrders; track order.orderId) {
+            <span class="mr-2">#{{ order.orderId }}</span>
+          }
+        </p>
+      }
+    }
+
+    @if (preparedOrders(); as data) {
+      @if (data.rejected.length > 0) {
+        <details class="mt-3 text-sm">
+          <summary class="cursor-pointer">
+            ออเดอร์ที่ไม่ผ่านเงื่อนไข {{ data.rejected.length }} รายการ
+          </summary>
+
+          <ul class="mt-2 space-y-1">
+            @for (order of data.rejected; track $index) {
+              <li>#{{ order.orderId }} · {{ order.reason }}</li>
+            }
+          </ul>
+        </details>
+      }
+    }
   </section>
 
   <div class="route-workspace">
@@ -93,15 +305,19 @@
     >
       <div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
         <h2 id="map-title" class="font-semibold">แผนที่จัดส่ง</h2>
-        <span class="text-xs text-base-content/60">{{ store()?.name || 'ยังไม่มีข้อมูลร้านค้า' }}</span>
+        <span class="text-xs text-base-content/60">{{ store()?.name }}</span>
       </div>
+      @if (store(); as planningStore) {
       <app-route-map
+        [store]="planningStore"
         [routes]="routes()"
-        [store]="store()"
         [activeRouteId]="activeRouteId()"
         [selectedStopId]="selectedStopId()"
         (stopSelected)="selectStop($event)"
       />
+      } @else {
+        <p class="p-8 text-sm text-base-content/60">โหลดข้อมูลร้านเพื่อแสดงแผนที่</p>
+      }
     </section>
 
     <aside
@@ -111,25 +327,22 @@
       <div class="mb-2 flex items-center justify-between gap-2">
         <h2 id="legend-title" class="font-semibold">
           ไรเดอร์
-          <span class="ml-1 text-sm font-normal text-base-content/50"
-            >{{ routes().length }} คน</span
-          >
+          <span class="ml-1 text-sm font-normal text-base-content/50">
+            {{ usedRiderCount() }} คน · {{ routes().length }} รอบ
+          </span>
         </h2>
-        <button
-          type="button"
-          class="btn btn-ghost btn-xs"
-          [attr.aria-pressed]="activeRouteId() === null"
-          (click)="showAllRoutes()"
-          [disabled]="routes().length === 0"
-        >
-          ดูทั้งหมด
-        </button>
+        @if (routes().length > 0) {
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs"
+            [attr.aria-pressed]="activeRouteId() === null"
+            (click)="showAllRoutes()"
+          >
+            ดูทั้งหมด
+          </button>
+        }
       </div>
-      @if (errorMessage()) {
-        <div class="alert alert-error">{{ errorMessage() }}</div>
-      } @else if (loading()) {
-        <div class="py-12 text-center text-sm text-base-content/60">กำลังโหลดข้อมูลเส้นทาง...</div>
-      } @else if (routes().length > 0) {
+      @if (routes().length > 0) {
         <div class="rider-list">
           @for (route of routes(); track route.id) {
             <article
@@ -149,9 +362,9 @@
                 <span class="rider-number">{{ route.id }}</span>
                 <span class="rider-name"
                   ><strong>{{ route.name }}</strong
+                  ><small>{{ route.plate }} · รอบ {{ route.roundNumber }}</small
                   ><small
-                    >{{ route.plate }} · {{ route.stops.length }} จุด ·
-                    {{ route.totalBoxes }} กล่อง</small
+                    >{{ route.stops.length }} ออเดอร์ · {{ route.totalBoxes }} กล่อง</small
                   ></span
                 >
                 <span class="text-base-content/50" aria-hidden="true">{{
@@ -160,10 +373,11 @@
               </button>
               <div class="rider-meta">
                 <span>{{ route.distanceKm }} กม. · {{ route.durationMinutes }} นาที</span
-                ><span>ส่งแล้ว {{ route.deliveredStops ?? 0 }}/{{ route.stops.length }} จุด</span>
+                ><span>คาดว่าส่งครบ {{ route.lastArrival }} น.</span>
               </div>
               @if (activeRouteId() === route.id) {
                 <ol class="stop-list" [id]="'route-stops-' + route.id">
+                  <li class="return-stop">ออกจากร้าน {{ route.departureTime }} น.</li>
                   @for (stop of route.stops; track stop.id) {
                     <li>
                       <button
@@ -175,12 +389,23 @@
                         <span class="stop-number">{{ stop.sequence }}</span>
                         <span
                           ><strong>{{ stop.customer }}</strong
-                          ><small>{{ stop.boxes }} กล่อง · ถึง {{ stop.eta }} น.</small
-                          ><small>{{ stop.address }}</small></span
-                        >
+                          ><small
+                            >#{{ stop.id }} · {{ stop.boxes }} กล่อง · คาดว่าถึง
+                            {{ stop.eta }} น.</small
+                          ><small>{{ stop.address }}</small>
+                          @if (stop.phone) {
+                            <small>โทร {{ stop.phone }}</small>
+                          }
+                          @if (stop.isLate) {
+                            <small
+                              >คาดว่าส่งช้า {{ stop.lateMinutes | number: '1.1-1' }} นาที</small
+                            >
+                          }
+                        </span>
                       </button>
                     </li>
                   }
+                  <li class="return-stop">↩ กลับร้านประมาณ {{ route.returnTime }} น.</li>
                 </ol>
               }
             </article>
@@ -189,7 +414,13 @@
         <p class="mt-3 text-xs text-base-content/50">เลือกไรเดอร์เพื่อดูเส้นทางและจุดส่ง</p>
       } @else {
         <div class="py-12 text-center text-sm text-base-content/60">
-          <p>ยังไม่มีเส้นทางจัดส่งของวันนี้</p>
+          @if (dataLoading()) {
+            <p>กำลังโหลดข้อมูลจัดส่ง...</p>
+          } @else if (planResult()) {
+            <p>ยังไม่มีออเดอร์ที่มอบหมายให้ไรเดอร์ได้</p>
+          } @else {
+            <p>กดจัดเส้นทางเพื่อแสดงไรเดอร์และจุดส่ง</p>
+          }
         </div>
       }
     </aside>
@@ -200,7 +431,7 @@
     <dl class="rules-grid px-4 pb-4 text-sm">
       <div>
         <dt>งานต่อไรเดอร์</dt>
-        <dd>ไม่เกิน 3 ออเดอร์ / 10 กล่อง</dd>
+        <dd>รวมไม่เกินคนละ 3 ออเดอร์ · บรรทุกไม่เกิน 10 กล่องต่อรอบ</dd>
       </div>
       <div>
         <dt>รัศมี / ความเร็ว</dt>
@@ -225,3 +456,5 @@
     </dl>
   </details>
 </section>
+
+}

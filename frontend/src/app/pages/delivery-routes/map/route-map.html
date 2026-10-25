@@ -1,0 +1,50 @@
+<div class="delivery-map">
+  <div class="delivery-map__canvas-wrap">
+    <div
+      #mapElement
+      class="delivery-map__canvas"
+      role="region"
+      aria-label="แผนที่เส้นทางจัดส่ง เลื่อนล้อเมาส์เพื่อซูม ลากเพื่อเลื่อน และเลือกหมุดเพื่อดูจุดส่ง"
+    ></div>
+    <button
+      type="button"
+      class="btn btn-sm delivery-map__fit"
+      title="ปรับมุมมองให้ครอบคลุมพิกัดของทุกเส้นทาง โดยคงตัวกรองเดิม"
+      (click)="showAllRoutes()"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        aria-hidden="true"
+      >
+        <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+      จัดมุมมองแผนที่
+    </button>
+    @if (visibleRoutes.length === 0) {
+      <div class="delivery-map__empty" role="status">
+        <strong>ยังไม่มีเส้นทาง</strong>
+        <span>เมื่อมีผลการจัดเส้นทาง จุดส่งและลำดับการเดินทางจะแสดงบนแผนที่นี้</span>
+      </div>
+    }
+    @if (tileError()) {
+      <p class="delivery-map__error" role="status">
+        โหลดแผนที่พื้นหลังไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ต ยังดูจุดส่งในแผนได้
+      </p>
+    }
+  </div>
+  <div class="delivery-map__footer">
+    <span
+      >เลื่อนล้อเมาส์เพื่อซูม · เส้นประ: กลับร้าน
+      @if (usingFallback()) {
+        <span role="status" title="MapTiler โหลดไม่ได้ จึงใช้ OpenStreetMap สำรอง">
+          · ใช้แผนที่สำรอง</span
+        >
+      }
+    </span>
+    <span>เส้นตรงเชื่อมพิกัด ระยะทางและเวลาประมาณจากพิกัด ไม่ใช่เส้นทางตามถนน</span>
+  </div>
+</div>
