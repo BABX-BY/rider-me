@@ -216,12 +216,15 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
     this.savingOrder.set(true);
     this.notification.set(null);
     try {
-      for (let index = 0; index < amount; index += 1) {
+      const items = Array.from({ length: amount }, () => {
         const customer = this.customers()[Math.floor(Math.random() * this.customers().length)];
-        const boxes = 1 + Math.floor(Math.random() * 3);
-        const created = await this.orderApi.createOrder(customer.customer_id, boxes);
-        this.orders.update((list) => [...list, created]);
-      }
+        return {
+          customer_id: customer.customer_id,
+          box_quantity: 1 + Math.floor(Math.random() * 3),
+        };
+      });
+      const createdOrders = await this.orderApi.simulateOrders(items);
+      this.orders.update((list) => [...list, ...createdOrders]);
       this.notification.set({ type: 'success', message: `สร้างออเดอร์ตัวอย่างแบบสุ่มเพิ่ม ${amount} รายการ รวม ${this.orders().length} รายการแล้ว` });
     } catch (error) {
       this.notification.set({ type: 'error', message: this.toMessage(error, 'สร้างออเดอร์ตัวอย่างได้บางส่วน กรุณาตรวจสอบรายการปัจจุบัน') });

@@ -37,6 +37,90 @@ orderRouter.get("/", async (req, res) => {
   }
 });
 
+orderRouter.post("/simulate", async (req, res) => {
+  const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
+  const items: Array<{ customerId: number; boxQuantity: number }> = rawItems.map((item: { customer_id?: unknown; box_quantity?: unknown }) => ({
+    customerId: Number(item.customer_id),
+    boxQuantity: Number(item.box_quantity),
+  }));
+
+  if (
+    items.length === 0 ||
+    items.length > 30 ||
+    items.some(
+      (item) =>
+        !Number.isInteger(item.customerId) ||
+        item.customerId <= 0 ||
+        !Number.isInteger(item.boxQuantity) ||
+        item.boxQuantity < 1 ||
+        item.boxQuantity > 3,
+    )
+  ) {
+    res.status(400).json({ message: "ข้อมูลจำลองออเดอร์ไม่ถูกต้อง" });
+    return;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const countResult = await client.query(
+      "SELECT COUNT(*)::int AS order_count FROM orders WHERE order_date = CURRENT_DATE",
+    );
+    if (countResult.rows[0].order_count + items.length > 30) {
+      await client.query("ROLLBACK");
+      res.status(409).json({ message: "ระบบจำลองออเดอร์ได้ไม่เกิน 30 รายการ" });
+      return;
+    }
+
+    const customerIds = [...new Set(items.map((item) => item.customerId))];
+    const customerResult = await client.query(
+      "SELECT customer_id FROM customers WHERE customer_id = ANY($1::int[])",
+      [customerIds],
+    );
+    if (customerResult.rowCount !== customerIds.length) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ message: "พบ customer_id ที่ไม่มีอยู่ในระบบ" });
+      return;
+    }
+
+    const values = items.flatMap((item) => [item.customerId, item.boxQuantity]);
+    const placeholders = items.map((_: { customerId: number; boxQuantity: number }, index: number) => `($${index * 2 + 1}, $${index * 2 + 2}, CURRENT_DATE)`);
+    const result = await client.query(
+      `WITH inserted AS (
+         INSERT INTO orders (customer_id, box_quantity, order_date)
+         VALUES ${placeholders.join(", ")}
+         RETURNING order_id, customer_id, box_quantity, order_date, status, created_at
+       )
+       SELECT
+         inserted.order_id,
+         inserted.box_quantity,
+         inserted.order_date,
+         inserted.status,
+         inserted.created_at,
+         customer.customer_id,
+         customer.first_name AS customer_first_name,
+         customer.last_name AS customer_last_name,
+         customer.phone AS customer_phone,
+         customer.address AS customer_address,
+         customer.latitude AS customer_latitude,
+         customer.longitude AS customer_longitude
+       FROM inserted
+       INNER JOIN customers AS customer ON customer.customer_id = inserted.customer_id
+       ORDER BY inserted.order_id`,
+      values,
+    );
+
+    await client.query("COMMIT");
+    res.status(201).json(result.rows);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("ไม่สามารถสร้างออเดอร์จำลองแบบชุดได้:", error);
+    res.status(500).json({ message: "ไม่สามารถสร้างออเดอร์จำลองได้" });
+  } finally {
+    client.release();
+  }
+});
+
 orderRouter.post("/", async (req, res) => {
   const customerId = Number(req.body?.customer_id);
   const boxQuantity = Number(req.body?.box_quantity);

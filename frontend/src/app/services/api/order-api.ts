@@ -34,6 +34,11 @@ export class OrderApi {
     );
   }
 
+  async simulateOrders(items: Array<{ customer_id: number; box_quantity: number }>): Promise<Order[]> {
+    const url = `${this.api.API_ENDPOINT}/orders/simulate`;
+    return await lastValueFrom(this.http.post<Order[]>(url, { items }));
+  }
+
   async updateOrder(orderId: number, boxQuantity: number): Promise<Order> {
     const url = `${this.api.API_ENDPOINT}/orders/${orderId}`;
     return await lastValueFrom(this.http.patch<Order>(url, { box_quantity: boxQuantity }));

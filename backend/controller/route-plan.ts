@@ -183,6 +183,7 @@ routePlanRouter.post("/generate", async (req, res) => {
     }
 
     const createdPlans = [];
+    const stopRows: Array<[number, number, number, number, number, number]> = [];
     const routeDate = new Date().toISOString().slice(0, 10).replaceAll("-", "");
     const versionResult = await client.query(
       `SELECT COALESCE(MAX(version), 0)::int AS version
@@ -253,27 +254,34 @@ routePlanRouter.post("/generate", async (req, res) => {
           1,
           Math.ceil((stopDistances[stopIndex]! / DELIVERY_SPEED_KM_HOUR) * 60),
         );
-        await client.query(
-          `INSERT INTO route_stops (
-             route_plan_id, rider_id, order_id, stop_sequence,
-             distance_from_previous, estimated_arrival, delivery_status
-           ) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP + ($6 * INTERVAL '1 minute'), 'PENDING')`,
-          [
-            routePlanId,
-            rider.rider_id,
-            order.order_id,
-            stopIndex + 1,
-            Number(stopDistances[stopIndex]!.toFixed(2)),
-            elapsedMinutes,
-          ],
-        );
-        await client.query(
-          `UPDATE orders SET status = 'ASSIGNED' WHERE order_id = $1`,
-          [order.order_id],
-        );
+        stopRows.push([
+          routePlanId,
+          rider.rider_id,
+          order.order_id,
+          stopIndex + 1,
+          Number(stopDistances[stopIndex]!.toFixed(2)),
+          elapsedMinutes,
+        ]);
       }
       createdPlans.push({ routePlanId, riderId: rider.rider_id, worksheetCode });
     }
+
+    const stopValues = stopRows.flat();
+    const stopPlaceholders = stopRows.map((_, index) => {
+      const offset = index * 6;
+      return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, CURRENT_TIMESTAMP + ($${offset + 6} * INTERVAL '1 minute'), 'PENDING')`;
+    });
+    await client.query(
+      `INSERT INTO route_stops (
+         route_plan_id, rider_id, order_id, stop_sequence,
+         distance_from_previous, estimated_arrival, delivery_status
+       ) VALUES ${stopPlaceholders.join(", ")}`,
+      stopValues,
+    );
+    await client.query(
+      `UPDATE orders SET status = 'ASSIGNED' WHERE order_id = ANY($1::int[])`,
+      [orders.map((order) => order.order_id)],
+    );
 
     await client.query("COMMIT");
     res.status(201).json({ message: "สร้างใบงานของวันนี้สำเร็จ", plans: createdPlans });
