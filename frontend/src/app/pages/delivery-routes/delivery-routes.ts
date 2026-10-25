@@ -87,18 +87,10 @@ export class DeliveryRoutes {
     this.errorMessage.set('');
     this.dataNotice.set('');
     try {
-      let plans = await this.routeApi.getRoutePlans(this.today());
+      const today = this.today();
+      const plans = await this.routeApi.getRoutePlans(today);
       if (plans.length === 0) {
-        const availablePlans = await this.routeApi.getRoutePlans();
-        const latestDate = availablePlans[0]?.route_date;
-        plans = latestDate
-          ? availablePlans.filter((plan) => plan.route_date === latestDate)
-          : [];
-        if (plans.length > 0) {
-          this.dataNotice.set(
-            `ยังไม่มีใบงานของวันนี้ กำลังแสดงใบงานที่เลือกไว้วันที่ ${latestDate}`,
-          );
-        }
+        this.dataNotice.set(`ยังไม่มีใบงานของวันที่ ${this.formatDateLabel(today)}`);
       }
       const routeData = await Promise.all(
         plans.map(async (plan, index) => ({
@@ -117,6 +109,8 @@ export class DeliveryRoutes {
           latitude: Number(firstPlan.store_latitude),
           longitude: Number(firstPlan.store_longitude),
         });
+      } else {
+        this.store.set(null);
       }
     } catch (error) {
       console.error('ไม่สามารถโหลดเส้นทางจัดส่งได้:', error);
@@ -172,6 +166,15 @@ export class DeliveryRoutes {
   private formatTime(value: string | null | undefined): string {
     if (!value) return '-';
     return new Date(value).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  private formatDateLabel(value: string): string {
+    const date = new Date(`${value}T00:00:00`);
+    return date.toLocaleDateString('th-TH', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
   }
 
   private routeColor(index: number): string {

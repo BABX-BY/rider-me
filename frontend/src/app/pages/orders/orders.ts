@@ -245,7 +245,15 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
       fillOpacity: 0.08,
       weight: 2,
     }).addTo(this.map);
-    L.marker([latitude, longitude]).bindPopup('จุดศูนย์กลางการค้นหา').addTo(this.nearbyLayer);
+    L.circleMarker([latitude, longitude], {
+      radius: 9,
+      color: '#1d4ed8',
+      fillColor: '#60a5fa',
+      fillOpacity: 1,
+      weight: 3,
+    })
+      .bindPopup('จุดศูนย์กลางการค้นหา')
+      .addTo(this.nearbyLayer);
     for (const order of this.nearbyOrders() ?? []) {
       const orderLat = Number(order.customer_latitude);
       const orderLon = Number(order.customer_longitude);
