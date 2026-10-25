@@ -20,6 +20,11 @@ export interface PreviewRoute {
   distanceKm: string;
   durationMinutes: number;
   lastArrival: string;
+  revenue?: number;
+  cost?: number;
+  profit?: number;
+  deliveredStops?: number;
+  pendingStops?: number;
   stops: readonly PreviewStop[];
 }
 

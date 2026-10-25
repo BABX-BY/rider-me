@@ -26,6 +26,7 @@ export class RiderWork implements OnDestroy, OnInit {
   protected readonly rider = signal<Rider | null>(null);
   protected readonly loading = signal(true);
   protected readonly errorMessage = signal('');
+  protected readonly statusUpdating = signal<number | null>(null);
   protected readonly selectedStopSequence = signal<number | null>(null);
   protected readonly showOverviewMap = signal(false);
   protected readonly work = signal<RiderWorkSummary>({
@@ -63,6 +64,31 @@ export class RiderWork implements OnDestroy, OnInit {
       DELIVERED: 'จัดส่งแล้ว',
       FAILED: 'จัดส่งไม่สำเร็จ',
     }[status];
+  }
+
+  protected async updateStopStatus(stop: RiderWorkStop, status: RiderWorkStop['status']): Promise<void> {
+    if (this.statusUpdating() !== null || stop.status === status) return;
+    this.statusUpdating.set(stop.routeStopId);
+    this.errorMessage.set('');
+    try {
+      await this.workApi.updateStopStatus(this.auth.getWorksheetCode(), stop.routeStopId, status);
+      this.work.update((current) => {
+        const stops = current.stops.map((item) =>
+          item.routeStopId === stop.routeStopId ? { ...item, status } : item,
+        );
+        return {
+          ...current,
+          stops,
+          deliveredStops: stops.filter((item) => item.status === 'DELIVERED').length,
+          pendingStops: stops.filter((item) => item.status !== 'DELIVERED').length,
+        };
+      });
+    } catch (error) {
+      console.error('ไม่สามารถอัปเดตสถานะจุดส่งได้:', error);
+      this.errorMessage.set('ไม่สามารถบันทึกสถานะจุดส่งได้ กรุณาลองใหม่');
+    } finally {
+      this.statusUpdating.set(null);
+    }
   }
 
   protected routeColor(sequence: number): string {

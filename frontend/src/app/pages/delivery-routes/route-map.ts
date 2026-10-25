@@ -212,14 +212,14 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
         popupAnchor: [0, -25],
       }),
       keyboard: true,
-      title: `${this.store?.name ?? 'ร้านค้า'} · จุดเริ่มต้นและจุดกลับ`,
+      title: `${this.store?.name ?? 'ร้านค้า'} · จุดเริ่มต้น`,
       zIndexOffset: 700,
     })
-      .bindPopup(this.createPopup(this.store?.name ?? 'ร้านค้า', ['จุดเริ่มต้นและจุดกลับของทุกเส้นทาง']))
+      .bindPopup(this.createPopup(this.store?.name ?? 'ร้านค้า', ['จุดเริ่มต้นของทุกเส้นทาง']))
       .addTo(this.routeLayer);
     storeMarker
       .getElement()
-      ?.setAttribute('aria-label', `${this.store?.name ?? 'ร้านค้า'} จุดเริ่มต้นและจุดกลับ`);
+      ?.setAttribute('aria-label', `${this.store?.name ?? 'ร้านค้า'} จุดเริ่มต้น`);
   }
 
   private async loadRoadRoutes(routes: readonly PreviewRoute[]): Promise<void> {

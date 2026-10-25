@@ -5,7 +5,9 @@
       <p class="mt-1 text-base-content/70">วางแผนการส่งประจำวัน</p>
     </div>
     <div class="flex gap-2">
-      <button type="button" class="btn btn-outline" disabled>คำนวณใหม่</button>
+      <button type="button" class="btn btn-outline" (click)="refreshRoutes()" [disabled]="loading() || generating()">
+        โหลดข้อมูลใหม่
+      </button>
       <button
         type="button"
         class="btn btn-primary"
@@ -51,23 +53,23 @@
     <dl class="result-grid mt-4 border-t border-base-200 pt-4">
       <div>
         <dt>ระยะทางรวม</dt>
-        <dd>— <small>กม.</small></dd>
+        <dd>{{ totalDistance() | number:'1.2-2' }} <small>กม.</small></dd>
       </div>
       <div>
         <dt>เวลาจบรอบ</dt>
-        <dd>— <small>นาที</small></dd>
+        <dd>{{ totalDuration() }} <small>นาที</small></dd>
       </div>
       <div>
         <dt>รายรับ</dt>
-        <dd>— <small>บาท</small></dd>
+        <dd>{{ totalRevenue() | number:'1.2-2' }} <small>บาท</small></dd>
       </div>
       <div>
         <dt>ต้นทุนรวม</dt>
-        <dd>— <small>บาท</small></dd>
+        <dd>{{ totalCost() | number:'1.2-2' }} <small>บาท</small></dd>
       </div>
       <div>
         <dt>กำไร / ขาดทุน</dt>
-        <dd>— <small>บาท</small></dd>
+        <dd>{{ totalProfit() | number:'1.2-2' }} <small>บาท</small></dd>
       </div>
       <div>
         <dt>ค่าปรับคาดการณ์</dt>
@@ -150,7 +152,7 @@
               </button>
               <div class="rider-meta">
                 <span>{{ route.distanceKm }} กม. · {{ route.durationMinutes }} นาที</span
-                ><span>ส่งครบ {{ route.lastArrival }} น.</span>
+                ><span>ส่งแล้ว {{ route.deliveredStops ?? 0 }}/{{ route.stops.length }} จุด</span>
               </div>
               @if (activeRouteId() === route.id) {
                 <ol class="stop-list" [id]="'route-stops-' + route.id">
@@ -171,7 +173,6 @@
                       </button>
                     </li>
                   }
-                  <li class="return-stop">↩ กลับร้าน</li>
                 </ol>
               }
             </article>

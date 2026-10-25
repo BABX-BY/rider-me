@@ -1,3 +1,4 @@
+import { DecimalPipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { RouteMap } from './route-map';
 import { PreviewRoute, PreviewStop, PreviewStore } from './delivery-routes.preview';
@@ -5,7 +6,7 @@ import { RouteApi, RoutePlanRecord, RouteStopRecord } from '../../services/api/r
 
 @Component({
   selector: 'app-delivery-routes',
-  imports: [RouteMap],
+  imports: [RouteMap, DecimalPipe],
   templateUrl: './delivery-routes.html',
   styleUrls: ['./delivery-routes.css', './route-legend.css'],
 })
@@ -25,6 +26,21 @@ export class DeliveryRoutes {
   protected readonly totalBoxes = computed(() =>
     this.routes().reduce((total, route) => total + route.totalBoxes, 0),
   );
+  protected readonly totalDistance = computed(() =>
+    this.routes().reduce((total, route) => total + Number(route.distanceKm || 0), 0),
+  );
+  protected readonly totalDuration = computed(() =>
+    this.routes().reduce((total, route) => Math.max(total, route.durationMinutes), 0),
+  );
+  protected readonly totalRevenue = computed(() =>
+    this.routes().reduce((total, route) => total + (route.revenue ?? 0), 0),
+  );
+  protected readonly totalCost = computed(() =>
+    this.routes().reduce((total, route) => total + (route.cost ?? 0), 0),
+  );
+  protected readonly totalProfit = computed(() =>
+    this.routes().reduce((total, route) => total + (route.profit ?? 0), 0),
+  );
 
   constructor() {
     void this.loadRoutes();
@@ -33,6 +49,10 @@ export class DeliveryRoutes {
   protected showAllRoutes(): void {
     this.activeRouteId.set(null);
     this.selectedStopId.set(null);
+  }
+
+  protected refreshRoutes(): void {
+    void this.loadRoutes();
   }
 
   protected selectRoute(id: number): void {
@@ -124,6 +144,11 @@ export class DeliveryRoutes {
       distanceKm: Number(plan.total_distance || 0).toFixed(2),
       durationMinutes: Number(plan.estimated_minutes || 0),
       lastArrival: this.formatTime(lastStop?.estimated_arrival),
+      revenue: Number(plan.total_revenue || 0),
+      cost: Number(plan.total_cost || 0),
+      profit: Number(plan.total_profit || 0),
+      deliveredStops: stops.filter((stop) => stop.delivery_status === 'DELIVERED').length,
+      pendingStops: stops.filter((stop) => stop.delivery_status !== 'DELIVERED').length,
       stops: stops.map((stop): PreviewStop => ({
         id: stop.route_stop_id,
         sequence: stop.stop_sequence,

@@ -244,6 +244,19 @@
                   {{ selectedStopSequence() === stop.sequence ? 'แสดงอยู่บนแผนที่' : 'ดูเส้นทางจุดนี้' }}
                 </button>
 
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <button type="button" class="btn btn-success btn-sm min-h-10"
+                    [disabled]="statusUpdating() !== null || stop.status === 'DELIVERED'"
+                    (click)="updateStopStatus(stop, 'DELIVERED')">
+                    {{ statusUpdating() === stop.routeStopId ? 'กำลังบันทึก...' : 'ทำเครื่องหมายว่าส่งแล้ว' }}
+                  </button>
+                  <button type="button" class="btn btn-error btn-outline btn-sm min-h-10"
+                    [disabled]="statusUpdating() !== null || stop.status === 'FAILED'"
+                    (click)="updateStopStatus(stop, 'FAILED')">
+                    ส่งไม่สำเร็จ
+                  </button>
+                </div>
+
                 @if (selectedStopSequence() === stop.sequence) {
                 <div class="mt-4 overflow-hidden rounded-box border border-base-300">
                   <div class="border-b border-base-300 bg-base-200/60 px-3 py-2 text-xs text-base-content/60">

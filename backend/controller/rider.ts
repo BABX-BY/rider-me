@@ -67,6 +67,7 @@ riderRouter.get("/work", requireWorksheet, async (req: RiderSessionRequest, res)
           store.address AS store_address,
           store.latitude AS store_latitude,
           store.longitude AS store_longitude,
+          route_stop.route_stop_id,
           route_stop.order_id,
           route_stop.stop_sequence,
           CONCAT_WS(' ', customer.first_name, customer.last_name) AS customer_name,
@@ -96,6 +97,7 @@ riderRouter.get("/work", requireWorksheet, async (req: RiderSessionRequest, res)
     const rows = result.rows;
     const firstRow = rows[0];
     const stops = rows.map((row) => ({
+      routeStopId: Number(row.route_stop_id),
       sequence: row.stop_sequence,
       orderId: row.order_id,
       customerName: row.customer_name ?? "",

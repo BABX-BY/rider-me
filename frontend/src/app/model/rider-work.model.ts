@@ -1,6 +1,8 @@
 export type RiderStopStatus = 'PENDING' | 'DELIVERED' | 'FAILED';
+export type RiderWorkStopStatus = RiderStopStatus;
 
 export interface RiderWorkStop {
+  routeStopId: number;
   sequence: number;
   orderId: number;
   customerName: string;

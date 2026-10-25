@@ -2,7 +2,7 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { lastValueFrom } from 'rxjs';
 import { Api } from '../../config/api';
-import { RiderWorkSummary } from '../../model/rider-work.model';
+import { RiderWorkStopStatus, RiderWorkSummary } from '../../model/rider-work.model';
 
 @Injectable({ providedIn: 'root' })
 export class RiderWorkApi {
@@ -16,5 +16,19 @@ export class RiderWorkApi {
       }),
     );
     return response.work;
+  }
+
+  async updateStopStatus(
+    worksheetCode: string,
+    routeStopId: number,
+    deliveryStatus: RiderWorkStopStatus,
+  ): Promise<void> {
+    await lastValueFrom(
+      this.http.patch(
+        `${this.api.API_ENDPOINT}/route-stops/${routeStopId}/status`,
+        { deliveryStatus },
+        { headers: new HttpHeaders({ 'x-worksheet-code': worksheetCode }) },
+      ),
+    );
   }
 }
