@@ -3,7 +3,8 @@ import { pool } from "../database/pool.js";
 
 export const orderRouter = express.Router();
 
-orderRouter.get("/", async (_req, res) => {
+orderRouter.get("/", async (req, res) => {
+  const requestedDate = typeof req.query.date === "string" ? req.query.date.trim() : "";
   try {
     const result = await pool.query(`
       SELECT
@@ -22,8 +23,9 @@ orderRouter.get("/", async (_req, res) => {
       FROM orders AS o
       INNER JOIN customers AS c
         ON c.customer_id = o.customer_id
+      WHERE o.order_date = COALESCE(NULLIF($1, '')::date, CURRENT_DATE)
       ORDER BY o.order_id
-    `);
+    `, [requestedDate]);
 
     res.status(200).json(result.rows);
   } catch (error) {
@@ -55,7 +57,7 @@ orderRouter.post("/", async (req, res) => {
 
   try {
     const countResult = await pool.query(
-      "SELECT COUNT(*)::int AS order_count FROM orders",
+      "SELECT COUNT(*)::int AS order_count FROM orders WHERE order_date = CURRENT_DATE",
     );
 
     if (countResult.rows[0].order_count >= 30) {
@@ -282,12 +284,14 @@ orderRouter.delete("/", async (_req, res) => {
     const result = await pool.query(
       `
       DELETE FROM orders
+      WHERE order_date = CURRENT_DATE
+        AND status = 'PENDING'
       RETURNING order_id
       `,
     );
 
     res.status(200).json({
-      message: "ล้างรายการสั่งซื้อทั้งหมดสำเร็จ",
+      message: "ล้างออเดอร์ที่รอดำเนินการของวันนี้สำเร็จ",
       deleted_count: result.rowCount ?? 0,
     });
   } catch (error: unknown) {
@@ -355,6 +359,7 @@ orderRouter.get("/nearby", async (req, res) => {
         FROM orders AS o
         INNER JOIN customers AS c
           ON c.customer_id = o.customer_id
+        WHERE o.order_date = CURRENT_DATE
       )
       SELECT
         order_id,

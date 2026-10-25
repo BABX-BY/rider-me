@@ -21,9 +21,10 @@ export class OrderApi {
   private readonly http = inject(HttpClient);
   private readonly api = inject(Api);
 
-  async getOrders(): Promise<Order[]> {
+  async getOrders(date?: string): Promise<Order[]> {
     const url = `${this.api.API_ENDPOINT}/orders`;
-    return await lastValueFrom(this.http.get<Order[]>(url));
+    const params = date ? new HttpParams().set('date', date) : undefined;
+    return await lastValueFrom(this.http.get<Order[]>(url, { params }));
   }
 
   async createOrder(customerId: number, boxQuantity: number): Promise<Order> {

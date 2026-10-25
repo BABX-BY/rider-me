@@ -203,7 +203,7 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
   protected async simulateOrders(): Promise<void> {
     const currentCount = this.orders().length;
     if (currentCount >= 20) {
-      this.notification.set({ type: 'error', message: `มีออเดอร์ ${currentCount} รายการแล้ว (ช่วงเป้าหมาย 20–30) จึงไม่เพิ่มข้อมูลซ้ำ` });
+      this.notification.set({ type: 'error', message: `วันนี้มีออเดอร์ ${currentCount} รายการแล้ว (ช่วงเป้าหมาย 20–30) จึงไม่เพิ่มข้อมูลซ้ำ` });
       return;
     }
     if (this.customers().length === 0) {
@@ -416,7 +416,7 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
 
   protected async clearOrders(): Promise<void> {
     const confirmed = window.confirm(
-      `ยืนยันล้างออเดอร์ทั้งหมด ${this.orders().length} รายการใช่ไหม?\nการลบนี้ไม่สามารถย้อนกลับได้`,
+      `ยืนยันล้างออเดอร์ที่รอดำเนินการของวันนี้ ${this.orders().filter((order) => order.status === 'PENDING').length} รายการใช่ไหม?\nออเดอร์ที่จัดเส้นทางแล้วจะไม่ถูกลบ`,
     );
 
     if (!confirmed) {
