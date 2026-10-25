@@ -69,10 +69,14 @@ export class DeliveryRoutes {
   }
 
   protected async generateRoutes(): Promise<void> {
+    const hasRoutes = this.routes().length > 0;
+    if (hasRoutes && !window.confirm('คำนวณเส้นทางใหม่ของวันนี้หรือไม่? ระบบจะจัดเฉพาะออเดอร์ที่ยังรอส่ง และจะไม่เปลี่ยนงานที่ส่งแล้ว')) {
+      return;
+    }
     this.generating.set(true);
     this.errorMessage.set('');
     try {
-      await this.routeApi.generateTodayRoutes();
+      await this.routeApi.generateTodayRoutes(hasRoutes);
       await this.loadRoutes();
     } catch (error) {
       console.error('ไม่สามารถสร้างใบงานของวันนี้ได้:', error);

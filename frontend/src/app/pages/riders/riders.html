@@ -60,6 +60,15 @@
             <div class="rounded-lg bg-error/10 p-2"><strong class="block text-lg text-error">{{ rider.failed_order_count ?? 0 }}</strong><span class="text-xs text-base-content/60">ส่งไม่สำเร็จ ({{ rider.failed_box_count ?? 0 }} กล่อง)</span></div>
           </div>
 
+          <div class="mt-4 rounded-lg border border-base-300 px-3 py-2 text-sm">
+            @if ((rider.order_count ?? 0) > 0) {
+              <span class="font-semibold text-success">มีงานวันนี้</span>
+              <span class="ml-2 text-base-content/60">{{ rider.order_count }} ออเดอร์ · {{ rider.total_box_count ?? 0 }} กล่อง</span>
+            } @else {
+              <span class="font-semibold text-base-content/60">ยังไม่มีงานวันนี้</span>
+            }
+          </div>
+
           <dl class="mt-5 space-y-2 text-sm">
             <div class="flex justify-between gap-3">
               <dt class="text-base-content/60">ทะเบียนรถ</dt>
@@ -86,7 +95,7 @@
     } @else {
     <div class="overflow-x-auto rounded-box border border-base-300 bg-base-100">
       <table class="table">
-        <thead><tr><th>Rider</th><th>ทะเบียนรถ</th><th>สถานะ</th><th>ออเดอร์</th><th>กล่อง</th><th>ส่งแล้ว</th><th>รอส่ง</th><th></th></tr></thead>
+        <thead><tr><th>Rider</th><th>ทะเบียนรถ</th><th>สถานะ</th><th>งานวันนี้</th><th>ออเดอร์</th><th>กล่อง</th><th>ส่งแล้ว</th><th>รอส่ง</th><th></th></tr></thead>
         <tbody>
           @for (rider of riders(); track rider.rider_id) {
           <tr>
@@ -95,6 +104,13 @@
             <td><span class="badge" [class]="statusClass(rider.status)">{{ statusLabel(rider.status) }}</span></td>
             <td>{{ rider.order_count ?? 0 }}</td>
             <td>{{ rider.total_box_count ?? 0 }}</td>
+            <td>
+              @if ((rider.order_count ?? 0) > 0) {
+                <span class="badge badge-success">มีงานวันนี้</span>
+              } @else {
+                <span class="badge badge-ghost">ยังไม่มีงานวันนี้</span>
+              }
+            </td>
             <td class="text-success">{{ rider.delivered_order_count ?? 0 }} ออเดอร์ / {{ rider.delivered_box_count ?? 0 }} กล่อง</td>
             <td class="text-warning">{{ rider.pending_order_count ?? 0 }} ออเดอร์ / {{ rider.pending_box_count ?? 0 }} กล่อง</td>
             <td><button type="button" class="btn btn-square btn-ghost btn-sm" title="แสดง QR" aria-label="แสดง QR" (click)="showQr(rider)">▦</button></td>

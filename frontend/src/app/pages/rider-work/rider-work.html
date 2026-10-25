@@ -250,11 +250,20 @@
                     (click)="updateStopStatus(stop, 'DELIVERED')">
                     {{ statusUpdating() === stop.routeStopId ? 'กำลังบันทึก...' : 'ทำเครื่องหมายว่าส่งแล้ว' }}
                   </button>
-                  <button type="button" class="btn btn-error btn-outline btn-sm min-h-10"
-                    [disabled]="statusUpdating() !== null || stop.status === 'FAILED'"
-                    (click)="updateStopStatus(stop, 'FAILED')">
-                    ส่งไม่สำเร็จ
-                  </button>
+                  @if (stop.status !== 'DELIVERED') {
+                    @if (stop.status === 'FAILED') {
+                      <button type="button" class="btn btn-warning btn-outline btn-sm min-h-10"
+                        [disabled]="statusUpdating() !== null"
+                        (click)="updateStopStatus(stop, 'PENDING')">
+                        ลองส่งใหม่
+                      </button>
+                    }
+                    <button type="button" class="btn btn-error btn-outline btn-sm min-h-10"
+                      [disabled]="statusUpdating() !== null || stop.status === 'FAILED'"
+                      (click)="updateStopStatus(stop, 'FAILED')">
+                      ส่งไม่สำเร็จ
+                    </button>
+                  }
                 </div>
 
                 @if (selectedStopSequence() === stop.sequence) {

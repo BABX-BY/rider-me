@@ -134,7 +134,7 @@ routeStopRouter.patch("/:id/status", requireWorksheet, async (req: RiderSessionR
   try {
     await client.query("BEGIN");
     const stopResult = await client.query(
-      `SELECT route_stop_id, order_id
+      `SELECT route_stop_id, order_id, delivery_status
        FROM route_stops
        WHERE route_stop_id = $1
          AND rider_id = $2
@@ -150,6 +150,15 @@ routeStopRouter.patch("/:id/status", requireWorksheet, async (req: RiderSessionR
     }
 
     const orderId = stopResult.rows[0].order_id;
+    const currentStatus = String(stopResult.rows[0].delivery_status);
+    if (currentStatus === "DELIVERED" && deliveryStatus !== "DELIVERED") {
+      await client.query("ROLLBACK");
+      res.status(409).json({
+        message: "ออเดอร์นี้จัดส่งสำเร็จแล้ว ไม่สามารถเปลี่ยนเป็นส่งไม่สำเร็จได้",
+      });
+      return;
+    }
+
     const deliveredAt = deliveryStatus === "DELIVERED" ? "CURRENT_TIMESTAMP" : "NULL";
     await client.query(
       `UPDATE route_stops

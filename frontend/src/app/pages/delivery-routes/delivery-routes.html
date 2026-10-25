@@ -14,7 +14,7 @@
         (click)="generateRoutes()"
         [disabled]="loading() || generating()"
       >
-        {{ generating() ? 'กำลังจัดเส้นทาง...' : 'จัดเส้นทาง' }}
+        {{ generating() ? 'กำลังจัดเส้นทาง...' : (routes().length > 0 ? 'คำนวณใหม่' : 'จัดเส้นทาง') }}
       </button>
     </div>
   </header>

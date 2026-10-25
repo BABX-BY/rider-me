@@ -65,9 +65,10 @@ export class RouteApi {
     );
   }
 
-  async generateTodayRoutes(): Promise<{ message: string }> {
+  async generateTodayRoutes(regenerate = false): Promise<{ message: string }> {
+    const params = regenerate ? new HttpParams().set('regenerate', 'true') : undefined;
     return lastValueFrom(
-      this.http.post<{ message: string }>(`${this.api.API_ENDPOINT}/route-plans/generate`, {}),
+      this.http.post<{ message: string }>(`${this.api.API_ENDPOINT}/route-plans/generate`, {}, { params }),
     );
   }
 }

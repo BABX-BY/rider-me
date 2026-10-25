@@ -28,8 +28,9 @@ function distanceKm(
   return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-routePlanRouter.post("/generate", async (_req, res) => {
+routePlanRouter.post("/generate", async (req, res) => {
   const client = await pool.connect();
+  const regenerate = req.query.regenerate === "true";
 
   try {
     await client.query("BEGIN");
@@ -39,12 +40,57 @@ routePlanRouter.post("/generate", async (_req, res) => {
        FROM route_plans
        WHERE route_date = CURRENT_DATE AND status = 'SELECTED'`,
     );
-    if (existing.rows[0].count > 0) {
+    if (existing.rows[0].count > 0 && !regenerate) {
       await client.query("ROLLBACK");
       res.status(409).json({
-        message: "วันนี้มีใบงานที่เลือกใช้งานแล้ว ไม่สร้างซ้ำ",
+        message: "วันนี้มีใบงานอยู่แล้ว หากต้องการคำนวณใหม่ให้กดคำนวณใหม่",
       });
       return;
+    }
+
+    if (existing.rows[0].count > 0 && regenerate) {
+      const activeStops = await client.query(
+        `SELECT COUNT(*)::int AS count
+         FROM route_stops AS route_stop
+         INNER JOIN route_plans AS route_plan
+           ON route_plan.route_plan_id = route_stop.route_plan_id
+         WHERE route_plan.route_date = CURRENT_DATE
+           AND route_plan.status = 'SELECTED'
+           AND route_stop.delivery_status <> 'PENDING'`,
+      );
+      if (activeStops.rows[0].count > 0) {
+        await client.query("ROLLBACK");
+        res.status(409).json({
+          message: "คำนวณใหม่ไม่ได้ เพราะมีออเดอร์ที่ส่งแล้วหรือส่งไม่สำเร็จแล้ว",
+        });
+        return;
+      }
+
+      await client.query(
+        `UPDATE orders
+         SET status = 'PENDING'
+         WHERE order_id IN (
+           SELECT route_stop.order_id
+           FROM route_stops AS route_stop
+           INNER JOIN route_plans AS route_plan
+             ON route_plan.route_plan_id = route_stop.route_plan_id
+           WHERE route_plan.route_date = CURRENT_DATE
+             AND route_plan.status = 'SELECTED'
+         )`,
+      );
+      await client.query(
+        `DELETE FROM route_stops
+         WHERE route_plan_id IN (
+           SELECT route_plan_id
+           FROM route_plans
+           WHERE route_date = CURRENT_DATE AND status = 'SELECTED'
+         )`,
+      );
+      await client.query(
+        `UPDATE route_plans
+         SET status = 'REJECTED', calculated_at = CURRENT_TIMESTAMP
+         WHERE route_date = CURRENT_DATE AND status = 'SELECTED'`,
+      );
     }
 
     const storeResult = await client.query(
@@ -64,7 +110,7 @@ routePlanRouter.post("/generate", async (_req, res) => {
     const ridersResult = await client.query(
       `SELECT rider_id, max_orders_per_route
        FROM riders
-       WHERE status <> 'INACTIVE'
+       WHERE status = 'AVAILABLE'
        ORDER BY rider_id`,
     );
     const ordersResult = await client.query(
@@ -104,18 +150,46 @@ routePlanRouter.post("/generate", async (_req, res) => {
     }
 
     const assignments: Array<typeof orders> = riders.map(() => []);
-    let riderIndex = 0;
-    for (const order of orders) {
+    const unassigned = [...orders];
+    for (let riderIndex = 0; riderIndex < riders.length && unassigned.length > 0; riderIndex += 1) {
+      const assignment = assignments[riderIndex]!;
+      let previousLatitude = Number(store.latitude);
+      let previousLongitude = Number(store.longitude);
       while (
-        assignments[riderIndex]!.length >= riders[riderIndex]!.max_orders_per_route
+        assignment.length < riders[riderIndex]!.max_orders_per_route &&
+        unassigned.length > 0
       ) {
-        riderIndex += 1;
+        let nearestIndex = 0;
+        let nearestDistance = Number.POSITIVE_INFINITY;
+        for (let orderIndex = 0; orderIndex < unassigned.length; orderIndex += 1) {
+          const candidate = unassigned[orderIndex]!;
+          const distance = distanceKm(
+            previousLatitude,
+            previousLongitude,
+            Number(candidate.latitude),
+            Number(candidate.longitude),
+          );
+          if (distance < nearestDistance) {
+            nearestDistance = distance;
+            nearestIndex = orderIndex;
+          }
+        }
+        const [nearestOrder] = unassigned.splice(nearestIndex, 1);
+        if (!nearestOrder) break;
+        assignment.push(nearestOrder);
+        previousLatitude = Number(nearestOrder.latitude);
+        previousLongitude = Number(nearestOrder.longitude);
       }
-      assignments[riderIndex]!.push(order);
     }
 
     const createdPlans = [];
     const routeDate = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+    const versionResult = await client.query(
+      `SELECT COALESCE(MAX(version), 0)::int AS version
+       FROM route_plans
+       WHERE route_date = CURRENT_DATE`,
+    );
+    const routeVersion = versionResult.rows[0].version + 1;
     for (let index = 0; index < assignments.length; index += 1) {
       const assignedOrders = assignments[index]!;
       if (assignedOrders.length === 0) continue;
@@ -153,15 +227,16 @@ routePlanRouter.post("/generate", async (_req, res) => {
       const totalCost =
         RIDER_CALL_COST + totalDistance * DISTANCE_COST_PER_BOX_KM * totalBoxes;
       const totalProfit = totalRevenue - totalBoxes * BOX_COST - totalCost;
-      const worksheetCode = `W${routeDate}R${rider.rider_id}`;
+      const worksheetCode = `W${routeDate}V${routeVersion}R${rider.rider_id}`;
       const planResult = await client.query(
         `INSERT INTO route_plans (
            store_id, route_date, version, status, total_distance,
            estimated_minutes, total_cost, total_revenue, total_profit, worksheet_code
-         ) VALUES ($1, CURRENT_DATE, 1, 'SELECTED', $2, $3, $4, $5, $6, $7)
+         ) VALUES ($1, CURRENT_DATE, $2, 'SELECTED', $3, $4, $5, $6, $7, $8)
          RETURNING route_plan_id`,
         [
           store.store_id,
+          routeVersion,
           Number(totalDistance.toFixed(2)),
           estimatedMinutes,
           Number(totalCost.toFixed(2)),
