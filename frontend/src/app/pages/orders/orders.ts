@@ -428,8 +428,7 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
 
     try {
       const result = await this.orderApi.clearOrders();
-
-      this.orders.set([]);
+      await this.loadOrders();
 
       this.notification.set({
         type: 'success',

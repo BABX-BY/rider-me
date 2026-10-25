@@ -175,6 +175,21 @@ routeStopRouter.patch("/:id/status", requireWorksheet, async (req: RiderSessionR
       [deliveryStatus === "DELIVERED" ? "DELIVERED" : "ASSIGNED", orderId],
     );
 
+    if (deliveryStatus === "DELIVERED") {
+      await client.query(
+        `UPDATE route_plans AS route_plan
+         SET status = 'COMPLETED', calculated_at = CURRENT_TIMESTAMP
+         WHERE route_plan.route_plan_id = $1
+           AND NOT EXISTS (
+             SELECT 1
+             FROM route_stops AS remaining_stop
+             WHERE remaining_stop.route_plan_id = route_plan.route_plan_id
+               AND remaining_stop.delivery_status <> 'DELIVERED'
+           )`,
+        [req.routePlanId],
+      );
+    }
+
     await client.query("COMMIT");
     res.status(200).json({ routeStopId, deliveryStatus });
   } catch (error) {
