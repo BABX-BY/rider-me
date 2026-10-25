@@ -149,38 +149,102 @@ routePlanRouter.post("/generate", async (req, res) => {
       return;
     }
 
-    const assignments: Array<typeof orders> = riders.map(() => []);
-    const unassigned = [...orders];
-    for (let riderIndex = 0; riderIndex < riders.length && unassigned.length > 0; riderIndex += 1) {
-      const assignment = assignments[riderIndex]!;
+    const buildNearestAssignments = (riderSequence: number[]) => {
+      const result: Array<typeof orders> = riders.map(() => []);
+      const unassigned = [...orders];
+      for (const riderIndex of riderSequence) {
+        const assignment = result[riderIndex]!;
+        let previousLatitude = Number(store.latitude);
+        let previousLongitude = Number(store.longitude);
+        while (
+          assignment.length < riders[riderIndex]!.max_orders_per_route &&
+          unassigned.length > 0
+        ) {
+          let nearestIndex = 0;
+          let nearestDistance = Number.POSITIVE_INFINITY;
+          for (let orderIndex = 0; orderIndex < unassigned.length; orderIndex += 1) {
+            const candidate = unassigned[orderIndex]!;
+            const distance = distanceKm(
+              previousLatitude,
+              previousLongitude,
+              Number(candidate.latitude),
+              Number(candidate.longitude),
+            );
+            if (distance < nearestDistance) {
+              nearestDistance = distance;
+              nearestIndex = orderIndex;
+            }
+          }
+          const [nearestOrder] = unassigned.splice(nearestIndex, 1);
+          if (!nearestOrder) break;
+          assignment.push(nearestOrder);
+          previousLatitude = Number(nearestOrder.latitude);
+          previousLongitude = Number(nearestOrder.longitude);
+        }
+      }
+      return result;
+    };
+
+    const buildChunkAssignments = (sortedOrders: typeof orders, riderSequence: number[]) => {
+      const result: Array<typeof orders> = riders.map(() => []);
+      let orderIndex = 0;
+      for (const riderIndex of riderSequence) {
+        const capacityForRider = riders[riderIndex]!.max_orders_per_route;
+        result[riderIndex] = sortedOrders.slice(orderIndex, orderIndex + capacityForRider);
+        orderIndex += capacityForRider;
+      }
+      return result;
+    };
+
+    const routeDistance = (assignment: typeof orders): number => {
       let previousLatitude = Number(store.latitude);
       let previousLongitude = Number(store.longitude);
-      while (
-        assignment.length < riders[riderIndex]!.max_orders_per_route &&
-        unassigned.length > 0
-      ) {
-        let nearestIndex = 0;
-        let nearestDistance = Number.POSITIVE_INFINITY;
-        for (let orderIndex = 0; orderIndex < unassigned.length; orderIndex += 1) {
-          const candidate = unassigned[orderIndex]!;
-          const distance = distanceKm(
-            previousLatitude,
-            previousLongitude,
-            Number(candidate.latitude),
-            Number(candidate.longitude),
-          );
-          if (distance < nearestDistance) {
-            nearestDistance = distance;
-            nearestIndex = orderIndex;
-          }
-        }
-        const [nearestOrder] = unassigned.splice(nearestIndex, 1);
-        if (!nearestOrder) break;
-        assignment.push(nearestOrder);
-        previousLatitude = Number(nearestOrder.latitude);
-        previousLongitude = Number(nearestOrder.longitude);
+      let total = 0;
+      for (const order of assignment) {
+        const nextLatitude = Number(order.latitude);
+        const nextLongitude = Number(order.longitude);
+        total += distanceKm(previousLatitude, previousLongitude, nextLatitude, nextLongitude);
+        previousLatitude = nextLatitude;
+        previousLongitude = nextLongitude;
+      }
+      return total + distanceKm(
+        previousLatitude,
+        previousLongitude,
+        Number(store.latitude),
+        Number(store.longitude),
+      );
+    };
+
+    const scoreAssignments = (candidate: Array<typeof orders>): number =>
+      candidate.reduce((total, assignment) => total + routeDistance(assignment), 0);
+
+    const baseRiderSequence = riders.map((_, index) => index);
+    const candidates: Array<Array<typeof orders>> = [];
+    for (let shift = 0; shift < riders.length; shift += 1) {
+      candidates.push(buildNearestAssignments([
+        ...baseRiderSequence.slice(shift),
+        ...baseRiderSequence.slice(0, shift),
+      ]));
+    }
+
+    const ordersByDistance = [...orders].sort((left, right) =>
+      distanceKm(Number(store.latitude), Number(store.longitude), Number(left.latitude), Number(left.longitude)) -
+      distanceKm(Number(store.latitude), Number(store.longitude), Number(right.latitude), Number(right.longitude)),
+    );
+    const ordersByLatitude = [...orders].sort((left, right) => Number(left.latitude) - Number(right.latitude));
+    const ordersByLongitude = [...orders].sort((left, right) => Number(left.longitude) - Number(right.longitude));
+    for (const sortedOrders of [ordersByDistance, ordersByLatitude, ordersByLongitude]) {
+      for (let shift = 0; shift < riders.length; shift += 1) {
+        candidates.push(buildChunkAssignments(sortedOrders, [
+          ...baseRiderSequence.slice(shift),
+          ...baseRiderSequence.slice(0, shift),
+        ]));
       }
     }
+
+    const assignments = candidates.reduce((best, candidate) =>
+      scoreAssignments(candidate) < scoreAssignments(best) ? candidate : best,
+    );
 
     const createdPlans = [];
     const stopRows: Array<[number, number, number, number, number, number]> = [];
