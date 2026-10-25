@@ -12,9 +12,17 @@
         type="button"
         class="btn btn-primary"
         (click)="generateRoutes()"
-        [disabled]="loading() || generating()"
+        [disabled]="loading() || generating() || canceling()"
       >
         {{ generating() ? 'กำลังจัดเส้นทาง...' : (routes().length > 0 ? 'คำนวณใหม่' : 'จัดเส้นทาง') }}
+      </button>
+      <button
+        type="button"
+        class="btn btn-error btn-outline"
+        (click)="cancelTodayRoutes()"
+        [disabled]="loading() || generating() || canceling() || routes().length === 0"
+      >
+        {{ canceling() ? 'กำลังยกเลิก...' : 'ยกเลิกใบงานวันนี้' }}
       </button>
     </div>
   </header>

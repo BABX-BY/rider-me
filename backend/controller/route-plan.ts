@@ -286,6 +286,82 @@ routePlanRouter.post("/generate", async (req, res) => {
   }
 });
 
+routePlanRouter.post("/cancel-today", async (_req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const selectedPlans = await client.query(
+      `SELECT route_plan_id
+       FROM route_plans
+       WHERE route_date = CURRENT_DATE AND status = 'SELECTED'
+       FOR UPDATE`,
+    );
+
+    if (selectedPlans.rowCount === 0) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ message: "วันนี้ยังไม่มีใบงานที่กำลังใช้งาน" });
+      return;
+    }
+
+    const planIds = selectedPlans.rows.map((row) => row.route_plan_id);
+    const activeStops = await client.query(
+      `SELECT COUNT(*)::int AS count
+       FROM route_stops
+       WHERE route_plan_id = ANY($1::int[])
+         AND delivery_status <> 'PENDING'`,
+      [planIds],
+    );
+
+    if (activeStops.rows[0].count > 0) {
+      await client.query("ROLLBACK");
+      res.status(409).json({
+        message: "ยกเลิกไม่ได้ เพราะมีจุดส่งที่ส่งแล้วหรือส่งไม่สำเร็จแล้ว",
+      });
+      return;
+    }
+
+    const orderResult = await client.query(
+      `UPDATE orders
+       SET status = 'PENDING'
+       WHERE order_id IN (
+         SELECT order_id
+         FROM route_stops
+         WHERE route_plan_id = ANY($1::int[])
+       )
+       RETURNING order_id`,
+      [planIds],
+    );
+
+    await client.query(
+      `DELETE FROM route_stops
+       WHERE route_plan_id = ANY($1::int[])`,
+      [planIds],
+    );
+
+    await client.query(
+      `UPDATE route_plans
+       SET status = 'REJECTED', calculated_at = CURRENT_TIMESTAMP
+       WHERE route_plan_id = ANY($1::int[])`,
+      [planIds],
+    );
+
+    await client.query("COMMIT");
+    res.status(200).json({
+      message: "ยกเลิกใบงานวันนี้สำเร็จ ออเดอร์กลับเป็นรอดำเนินการแล้ว",
+      canceled_plan_count: planIds.length,
+      reset_order_count: orderResult.rowCount ?? 0,
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("ไม่สามารถยกเลิกใบงานวันนี้ได้:", error);
+    res.status(500).json({ message: "ไม่สามารถยกเลิกใบงานวันนี้ได้" });
+  } finally {
+    client.release();
+  }
+});
+
 routePlanRouter.get("/", async (req, res) => {
   const routeDate = typeof req.query.date === "string" ? req.query.date : "";
   const status = typeof req.query.status === "string" ? req.query.status : "";

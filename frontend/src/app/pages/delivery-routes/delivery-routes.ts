@@ -14,6 +14,7 @@ export class DeliveryRoutes {
   private readonly routeApi = inject(RouteApi);
   protected readonly loading = signal(true);
   protected readonly generating = signal(false);
+  protected readonly canceling = signal(false);
   protected readonly errorMessage = signal('');
   protected readonly dataNotice = signal('');
   protected readonly activeRouteId = signal<number | null>(null);
@@ -83,6 +84,25 @@ export class DeliveryRoutes {
       this.errorMessage.set('ไม่สามารถจัดเส้นทางของวันนี้ได้');
     } finally {
       this.generating.set(false);
+    }
+  }
+
+  protected async cancelTodayRoutes(): Promise<void> {
+    if (!window.confirm('ยืนยันยกเลิกใบงานของวันนี้หรือไม่? ออเดอร์จะกลับเป็นรอดำเนินการ และยังไม่ถูกลบ')) {
+      return;
+    }
+
+    this.canceling.set(true);
+    this.errorMessage.set('');
+    try {
+      const result = await this.routeApi.cancelTodayRoutes();
+      this.dataNotice.set(`${result.message} (${result.reset_order_count} ออเดอร์)`);
+      await this.loadRoutes();
+    } catch (error) {
+      console.error('ไม่สามารถยกเลิกใบงานวันนี้ได้:', error);
+      this.errorMessage.set('ยกเลิกใบงานไม่ได้ อาจมีออเดอร์ที่ส่งแล้วหรือส่งไม่สำเร็จแล้ว');
+    } finally {
+      this.canceling.set(false);
     }
   }
 

@@ -71,4 +71,18 @@ export class RouteApi {
       this.http.post<{ message: string }>(`${this.api.API_ENDPOINT}/route-plans/generate`, {}, { params }),
     );
   }
+
+  async cancelTodayRoutes(): Promise<{
+    message: string;
+    canceled_plan_count: number;
+    reset_order_count: number;
+  }> {
+    return lastValueFrom(
+      this.http.post<{
+        message: string;
+        canceled_plan_count: number;
+        reset_order_count: number;
+      }>(`${this.api.API_ENDPOINT}/route-plans/cancel-today`, {}),
+    );
+  }
 }
