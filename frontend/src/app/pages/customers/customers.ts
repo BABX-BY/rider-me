@@ -41,6 +41,7 @@ export class Customers implements OnInit, AfterViewInit, OnDestroy {
 
   protected readonly deletingCustomerId = signal<number | null>(null);
   protected readonly savingCustomer = signal(false);
+  protected searchName = '';
   protected readonly editingCustomer = signal<Customer | null>(null);
   protected readonly addingCustomer = signal(false);
   protected readonly pickingLocation = signal(false);
@@ -200,9 +201,21 @@ export class Customers implements OnInit, AfterViewInit, OnDestroy {
     marker.openPopup();
   }
 
-  private async loadCustomers(): Promise<void> {
+  protected async searchCustomers(): Promise<void> {
+    await this.loadCustomers(this.searchName.trim());
+  }
+
+  protected async clearCustomerSearch(): Promise<void> {
+    this.searchName = '';
+    await this.loadCustomers();
+  }
+
+  private async loadCustomers(name = ''): Promise<void> {
+    this.loading.set(true);
+    this.errorMessage.set('');
+
     try {
-      const customers = await this.customerApi.getCustomers();
+      const customers = await this.customerApi.getCustomers(name);
       this.customers.set(customers);
       this.renderCustomerMarkers();
     } catch (error) {
@@ -345,13 +358,18 @@ export class Customers implements OnInit, AfterViewInit, OnDestroy {
         longitude: String(longitude),
       });
 
-      this.customers.update((customers) =>
-        customers.map((item) =>
-          item.customer_id === updatedCustomer.customer_id ? updatedCustomer : item,
-        ),
-      );
+      if (this.searchName.trim()) {
+        await this.loadCustomers(this.searchName.trim());
+      } else {
+        this.customers.update((customers) =>
+          customers.map((item) =>
+            item.customer_id === updatedCustomer.customer_id ? updatedCustomer : item,
+          ),
+        );
 
-      this.renderCustomerMarkers();
+        this.renderCustomerMarkers();
+      }
+
       this.cancelEditing();
 
       this.notification.set({
@@ -421,8 +439,13 @@ export class Customers implements OnInit, AfterViewInit, OnDestroy {
         longitude: String(longitude),
       });
 
-      this.customers.update((customers) => [...customers, newCustomer]);
-      this.renderCustomerMarkers();
+      if (this.searchName.trim()) {
+        await this.loadCustomers(this.searchName.trim());
+      } else {
+        this.customers.update((customers) => [...customers, newCustomer]);
+        this.renderCustomerMarkers();
+      }
+
       this.cancelEditing();
 
       this.notification.set({

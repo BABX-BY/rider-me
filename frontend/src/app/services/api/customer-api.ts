@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { lastValueFrom } from 'rxjs';
 import { Api } from '../../config/api';
@@ -25,9 +25,12 @@ export class CustomerApi {
   private readonly http = inject(HttpClient);
   private readonly api = inject(Api);
 
-  async getCustomers(): Promise<Customer[]> {
+  async getCustomers(name = ''): Promise<Customer[]> {
     const url = `${this.api.API_ENDPOINT}/customers`;
-    return await lastValueFrom(this.http.get<Customer[]>(url));
+    const trimmedName = name.trim();
+    const params = trimmedName ? new HttpParams().set('name', trimmedName) : undefined;
+
+    return await lastValueFrom(this.http.get<Customer[]>(url, { params }));
   }
 
   async createCustomer(customer: CustomerCreate): Promise<Customer> {

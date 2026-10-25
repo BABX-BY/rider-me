@@ -140,6 +140,31 @@
         </div>
       </div>
 
+      <form class="mb-4 flex gap-2" (ngSubmit)="searchCustomers()">
+        <input
+          class="input input-bordered min-w-0 flex-1"
+          type="search"
+          name="searchName"
+          placeholder="ค้นหาชื่อหรือนามสกุล"
+          [(ngModel)]="searchName"
+        />
+        <button
+          class="btn btn-outline"
+          type="submit"
+          [disabled]="loading() || savingCustomer() || deletingCustomerId() !== null"
+        >
+          ค้นหา
+        </button>
+        <button
+          class="btn btn-ghost"
+          type="button"
+          [disabled]="loading() || savingCustomer() || deletingCustomerId() !== null || !searchName"
+          (click)="clearCustomerSearch()"
+        >
+          ล้าง
+        </button>
+      </form>
+
       @if (loading()) {
         <p class="py-4 text-center">กำลังโหลดข้อมูลลูกค้า...</p>
       } @else if (errorMessage()) {
@@ -191,7 +216,13 @@
               </div>
             </article>
           } @empty {
-            <p class="py-4 text-center text-base-content/70">ยังไม่มีข้อมูลลูกค้า</p>
+            <p class="py-4 text-center text-base-content/70">
+              @if (searchName.trim()) {
+                ไม่พบลูกค้าที่ตรงกับ “{{ searchName.trim() }}”
+              } @else {
+                ยังไม่มีข้อมูลลูกค้า
+              }
+            </p>
           }
         </div>
       }
