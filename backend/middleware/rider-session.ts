@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { pool } from "../database/pool.js";
+import { BUSINESS_DATE_SQL } from "../database/business-date.js";
 
 export interface RiderSessionRider {
   rider_id: number;
@@ -39,7 +40,7 @@ export async function findValidWorksheet(worksheetCode: string) {
         ON route_stop.route_plan_id = route_plan.route_plan_id
       INNER JOIN riders AS rider ON rider.rider_id = route_stop.rider_id
       WHERE route_plan.worksheet_code = $1
-        AND route_plan.route_date = CURRENT_DATE
+        AND route_plan.route_date = ${BUSINESS_DATE_SQL}
         AND route_plan.status = 'SELECTED'
       GROUP BY
         route_plan.route_plan_id,

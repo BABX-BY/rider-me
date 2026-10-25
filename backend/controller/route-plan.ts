@@ -1,5 +1,6 @@
 import express from "express";
 import { pool } from "../database/pool.js";
+import { BUSINESS_DATE_SQL } from "../database/business-date.js";
 
 export const routePlanRouter = express.Router();
 
@@ -38,7 +39,7 @@ routePlanRouter.post("/generate", async (req, res) => {
     const existing = await client.query(
       `SELECT COUNT(*)::int AS count
        FROM route_plans
-       WHERE route_date = CURRENT_DATE AND status = 'SELECTED'`,
+       WHERE route_date = ${BUSINESS_DATE_SQL} AND status = 'SELECTED'`,
     );
     if (existing.rows[0].count > 0 && !regenerate) {
       await client.query("ROLLBACK");
@@ -54,7 +55,7 @@ routePlanRouter.post("/generate", async (req, res) => {
          FROM route_stops AS route_stop
          INNER JOIN route_plans AS route_plan
            ON route_plan.route_plan_id = route_stop.route_plan_id
-         WHERE route_plan.route_date = CURRENT_DATE
+         WHERE route_plan.route_date = ${BUSINESS_DATE_SQL}
            AND route_plan.status = 'SELECTED'
            AND route_stop.delivery_status <> 'PENDING'`,
       );
@@ -74,7 +75,7 @@ routePlanRouter.post("/generate", async (req, res) => {
            FROM route_stops AS route_stop
            INNER JOIN route_plans AS route_plan
              ON route_plan.route_plan_id = route_stop.route_plan_id
-           WHERE route_plan.route_date = CURRENT_DATE
+           WHERE route_plan.route_date = ${BUSINESS_DATE_SQL}
              AND route_plan.status = 'SELECTED'
          )`,
       );
@@ -83,13 +84,13 @@ routePlanRouter.post("/generate", async (req, res) => {
          WHERE route_plan_id IN (
            SELECT route_plan_id
            FROM route_plans
-           WHERE route_date = CURRENT_DATE AND status = 'SELECTED'
+           WHERE route_date = ${BUSINESS_DATE_SQL} AND status = 'SELECTED'
          )`,
       );
       await client.query(
         `UPDATE route_plans
          SET status = 'REJECTED', calculated_at = CURRENT_TIMESTAMP
-         WHERE route_date = CURRENT_DATE AND status = 'SELECTED'`,
+         WHERE route_date = ${BUSINESS_DATE_SQL} AND status = 'SELECTED'`,
       );
     }
 
@@ -122,7 +123,7 @@ routePlanRouter.post("/generate", async (req, res) => {
        FROM orders AS order_row
        INNER JOIN customers AS customer
          ON customer.customer_id = order_row.customer_id
-       WHERE order_row.order_date = CURRENT_DATE
+       WHERE order_row.order_date = ${BUSINESS_DATE_SQL}
          AND order_row.status = 'PENDING'
        ORDER BY order_row.order_id`,
     );
@@ -252,7 +253,7 @@ routePlanRouter.post("/generate", async (req, res) => {
     const versionResult = await client.query(
       `SELECT COALESCE(MAX(version), 0)::int AS version
        FROM route_plans
-       WHERE route_date = CURRENT_DATE`,
+       WHERE route_date = ${BUSINESS_DATE_SQL}`,
     );
     const routeVersion = versionResult.rows[0].version + 1;
     for (let index = 0; index < assignments.length; index += 1) {
@@ -297,7 +298,7 @@ routePlanRouter.post("/generate", async (req, res) => {
         `INSERT INTO route_plans (
            store_id, route_date, version, status, total_distance,
            estimated_minutes, total_cost, total_revenue, total_profit, worksheet_code
-         ) VALUES ($1, CURRENT_DATE, $2, 'SELECTED', $3, $4, $5, $6, $7, $8)
+         ) VALUES ($1, ${BUSINESS_DATE_SQL}, $2, 'SELECTED', $3, $4, $5, $6, $7, $8)
          RETURNING route_plan_id`,
         [
           store.store_id,
@@ -367,7 +368,7 @@ routePlanRouter.post("/cancel-today", async (_req, res) => {
     const selectedPlans = await client.query(
       `SELECT route_plan_id
        FROM route_plans
-       WHERE route_date = CURRENT_DATE AND status = 'SELECTED'
+       WHERE route_date = ${BUSINESS_DATE_SQL} AND status = 'SELECTED'
        FOR UPDATE`,
     );
 

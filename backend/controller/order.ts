@@ -1,5 +1,6 @@
 import express from "express";
 import { pool } from "../database/pool.js";
+import { BUSINESS_DATE_SQL } from "../database/business-date.js";
 
 export const orderRouter = express.Router();
 
@@ -23,7 +24,7 @@ orderRouter.get("/", async (req, res) => {
       FROM orders AS o
       INNER JOIN customers AS c
         ON c.customer_id = o.customer_id
-      WHERE o.order_date = COALESCE(NULLIF($1, '')::date, CURRENT_DATE)
+      WHERE o.order_date = COALESCE(NULLIF($1, '')::date, ${BUSINESS_DATE_SQL})
       ORDER BY o.order_id
     `, [requestedDate]);
 
@@ -64,7 +65,7 @@ orderRouter.post("/simulate", async (req, res) => {
   try {
     await client.query("BEGIN");
     const countResult = await client.query(
-      "SELECT COUNT(*)::int AS order_count FROM orders WHERE order_date = CURRENT_DATE",
+      `SELECT COUNT(*)::int AS order_count FROM orders WHERE order_date = ${BUSINESS_DATE_SQL}`,
     );
     if (countResult.rows[0].order_count + items.length > 30) {
       await client.query("ROLLBACK");
@@ -84,7 +85,7 @@ orderRouter.post("/simulate", async (req, res) => {
     }
 
     const values = items.flatMap((item) => [item.customerId, item.boxQuantity]);
-    const placeholders = items.map((_: { customerId: number; boxQuantity: number }, index: number) => `($${index * 2 + 1}, $${index * 2 + 2}, CURRENT_DATE)`);
+    const placeholders = items.map((_: { customerId: number; boxQuantity: number }, index: number) => `($${index * 2 + 1}, $${index * 2 + 2}, ${BUSINESS_DATE_SQL})`);
     const result = await client.query(
       `WITH inserted AS (
          INSERT INTO orders (customer_id, box_quantity, order_date)
@@ -141,7 +142,7 @@ orderRouter.post("/", async (req, res) => {
 
   try {
     const countResult = await pool.query(
-      "SELECT COUNT(*)::int AS order_count FROM orders WHERE order_date = CURRENT_DATE",
+      `SELECT COUNT(*)::int AS order_count FROM orders WHERE order_date = ${BUSINESS_DATE_SQL}`,
     );
 
     if (countResult.rows[0].order_count >= 30) {
@@ -168,7 +169,7 @@ orderRouter.post("/", async (req, res) => {
       INSERT INTO orders
         (customer_id, box_quantity, order_date)
       VALUES
-        ($1, $2, CURRENT_DATE)
+        ($1, $2, ${BUSINESS_DATE_SQL})
       RETURNING order_id
       `,
       [customerId, boxQuantity],
@@ -368,7 +369,7 @@ orderRouter.delete("/", async (_req, res) => {
     const result = await pool.query(
       `
       DELETE FROM orders
-      WHERE order_date = CURRENT_DATE
+      WHERE order_date = ${BUSINESS_DATE_SQL}
         AND status = 'PENDING'
       RETURNING order_id
       `,
@@ -443,7 +444,7 @@ orderRouter.get("/nearby", async (req, res) => {
         FROM orders AS o
         INNER JOIN customers AS c
           ON c.customer_id = o.customer_id
-        WHERE o.order_date = CURRENT_DATE
+        WHERE o.order_date = ${BUSINESS_DATE_SQL}
       )
       SELECT
         order_id,

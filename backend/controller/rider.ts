@@ -1,5 +1,6 @@
 import express from "express";
 import { pool } from "../database/pool.js";
+import { BUSINESS_DATE_SQL } from "../database/business-date.js";
 import { RiderSessionRequest, requireWorksheet } from "../middleware/rider-session.js";
 
 export const riderRouter = express.Router();
@@ -21,7 +22,7 @@ riderRouter.get("/", async (req, res) => {
             ON route_plan.route_plan_id = route_stop.route_plan_id
           INNER JOIN orders AS order_row
             ON order_row.order_id = route_stop.order_id
-          WHERE route_plan.route_date = CURRENT_DATE
+          WHERE route_plan.route_date = ${BUSINESS_DATE_SQL}
             AND route_plan.status = 'SELECTED'
         )
         SELECT
@@ -87,7 +88,7 @@ riderRouter.get("/work", requireWorksheet, async (req: RiderSessionRequest, res)
           ON customer.customer_id = order_row.customer_id
         WHERE route_stop.rider_id = $1
           AND route_plan.route_plan_id = $2
-          AND route_plan.route_date = CURRENT_DATE
+          AND route_plan.route_date = ${BUSINESS_DATE_SQL}
           AND route_plan.status = 'SELECTED'
         ORDER BY route_stop.stop_sequence
       `,
