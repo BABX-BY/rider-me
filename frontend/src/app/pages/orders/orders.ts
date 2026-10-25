@@ -1,7 +1,9 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { DatePipe } from '@angular/common';
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { DatePipe, DecimalPipe } from '@angular/common';
+import { AfterViewInit, Component, computed, ElementRef, inject, OnDestroy, OnInit, signal, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import * as L from 'leaflet';
+import { MAPTILER_API_KEY } from '../../config/map';
 import { Customer } from '../../model/customer.model';
 import { Order, OrderStatus } from '../../model/order.model';
 import { CustomerApi } from '../../services/api/customer-api';
@@ -19,13 +21,17 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
 
 @Component({
   selector: 'app-orders',
-  imports: [FormsModule, DatePipe],
+  imports: [FormsModule, DatePipe, DecimalPipe],
   templateUrl: './orders.html',
   styleUrl: './orders.css',
 })
-export class Orders implements OnInit {
+export class Orders implements OnInit, AfterViewInit, OnDestroy {
+  @ViewChild('nearbyMapElement') private nearbyMapElement!: ElementRef<HTMLDivElement>;
   private readonly orderApi = inject(OrderApi);
   private readonly customerApi = inject(CustomerApi);
+  private map?: L.Map;
+  private nearbyLayer?: L.LayerGroup;
+  private radiusCircle?: L.Circle;
 
   protected readonly maxOrders = MAX_ORDERS;
   protected readonly boxOptions = [1, 2, 3];
@@ -55,6 +61,12 @@ export class Orders implements OnInit {
   protected readonly editingOrder = signal<Order | null>(null);
   protected readonly addingOrder = signal(false);
 
+  protected readonly nearbyOrders = signal<Order[] | null>(null);
+  protected readonly nearbyLoading = signal(false);
+  protected readonly nearbyError = signal('');
+  protected nearbyRadiusKm = 3;
+  protected nearbyForm = { latitude: '16.244335', longitude: '103.249455' };
+
   protected form: { customer_id: number | null; box_quantity: number } = {
     customer_id: null,
     box_quantity: 1,
@@ -63,6 +75,32 @@ export class Orders implements OnInit {
   ngOnInit(): void {
     this.loadOrders();
     this.loadCustomers();
+  }
+
+  ngAfterViewInit(): void {
+    this.map = L.map(this.nearbyMapElement.nativeElement).setView([16.244335, 103.249455], 14);
+    L.tileLayer(`https://api.maptiler.com/maps/streets-v4/{z}/{x}/{y}.png?key=${MAPTILER_API_KEY}`, {
+      tileSize: 512,
+      zoomOffset: -1,
+      minZoom: 1,
+      attribution: '&copy; MapTiler &copy; OpenStreetMap contributors',
+      crossOrigin: true,
+    }).addTo(this.map);
+    this.nearbyLayer = L.layerGroup().addTo(this.map);
+    this.map.on('click', (event: L.LeafletMouseEvent) => {
+      this.nearbyForm = {
+        latitude: event.latlng.lat.toFixed(6),
+        longitude: event.latlng.lng.toFixed(6),
+      };
+      this.nearbyOrders.set(null);
+      this.nearbyError.set('');
+      this.renderNearbyMap();
+    });
+    this.renderNearbyMap();
+  }
+
+  ngOnDestroy(): void {
+    this.map?.remove();
   }
 
   // ---------- helpers ----------
@@ -117,6 +155,106 @@ export class Orders implements OnInit {
 
   protected dismissNotification(): void {
     this.notification.set(null);
+  }
+
+  protected async searchNearbyOrders(): Promise<void> {
+    const latitude = Number(this.nearbyForm.latitude);
+    const longitude = Number(this.nearbyForm.longitude);
+
+    if (
+      this.nearbyForm.latitude.trim() === '' ||
+      this.nearbyForm.longitude.trim() === '' ||
+      !Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+      !Number.isFinite(longitude) || longitude < -180 || longitude > 180 ||
+      !Number.isFinite(this.nearbyRadiusKm) || this.nearbyRadiusKm <= 0 || this.nearbyRadiusKm > 3
+    ) {
+      this.nearbyError.set('กรุณากรอกพิกัดให้ถูกต้อง และกำหนดรัศมีมากกว่า 0 ถึง 3 กม.');
+      this.nearbyOrders.set(null);
+      return;
+    }
+
+    this.nearbyLoading.set(true);
+    this.nearbyError.set('');
+
+    try {
+      const results = await this.orderApi.getNearbyOrders(latitude, longitude);
+      this.nearbyOrders.set(results.filter((order) => Number(order.distance_km) <= this.nearbyRadiusKm));
+      this.renderNearbyMap();
+    } catch (error) {
+      this.nearbyOrders.set(null);
+      this.nearbyError.set(this.toMessage(error, 'ค้นหาออเดอร์ใกล้เคียงไม่สำเร็จ'));
+      this.renderNearbyMap();
+    } finally {
+      this.nearbyLoading.set(false);
+    }
+  }
+
+  protected clearNearbySearch(): void {
+    this.nearbyOrders.set(null);
+    this.nearbyError.set('');
+    this.nearbyForm = { latitude: '16.244335', longitude: '103.249455' };
+    this.renderNearbyMap();
+  }
+
+  protected onNearbyRadiusChange(): void {
+    this.renderNearbyMap();
+  }
+
+  protected async simulateOrders(): Promise<void> {
+    const currentCount = this.orders().length;
+    if (currentCount >= 20) {
+      this.notification.set({ type: 'error', message: `มีออเดอร์ ${currentCount} รายการแล้ว (ช่วงเป้าหมาย 20–30) จึงไม่เพิ่มข้อมูลซ้ำ` });
+      return;
+    }
+    if (this.customers().length === 0) {
+      this.notification.set({ type: 'error', message: 'ยังไม่มีข้อมูลลูกค้าสำหรับสร้างออเดอร์ตัวอย่าง' });
+      return;
+    }
+
+    const targetCount = 20 + Math.floor(Math.random() * 11);
+    const amount = Math.min(targetCount - currentCount, MAX_ORDERS - currentCount);
+    this.savingOrder.set(true);
+    this.notification.set(null);
+    try {
+      for (let index = 0; index < amount; index += 1) {
+        const customer = this.customers()[Math.floor(Math.random() * this.customers().length)];
+        const boxes = 1 + Math.floor(Math.random() * 3);
+        const created = await this.orderApi.createOrder(customer.customer_id, boxes);
+        this.orders.update((list) => [...list, created]);
+      }
+      this.notification.set({ type: 'success', message: `สร้างออเดอร์ตัวอย่างแบบสุ่มเพิ่ม ${amount} รายการ รวม ${this.orders().length} รายการแล้ว` });
+    } catch (error) {
+      this.notification.set({ type: 'error', message: this.toMessage(error, 'สร้างออเดอร์ตัวอย่างได้บางส่วน กรุณาตรวจสอบรายการปัจจุบัน') });
+      await this.loadOrders();
+    } finally {
+      this.savingOrder.set(false);
+    }
+  }
+
+  private renderNearbyMap(): void {
+    if (!this.map || !this.nearbyLayer) return;
+    const latitude = Number(this.nearbyForm.latitude);
+    const longitude = Number(this.nearbyForm.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+    this.nearbyLayer.clearLayers();
+    this.radiusCircle?.remove();
+    this.radiusCircle = L.circle([latitude, longitude], {
+      radius: this.nearbyRadiusKm * 1000,
+      color: '#2563eb',
+      fillColor: '#3b82f6',
+      fillOpacity: 0.08,
+      weight: 2,
+    }).addTo(this.map);
+    L.marker([latitude, longitude]).bindPopup('จุดศูนย์กลางการค้นหา').addTo(this.nearbyLayer);
+    for (const order of this.nearbyOrders() ?? []) {
+      const orderLat = Number(order.customer_latitude);
+      const orderLon = Number(order.customer_longitude);
+      if (!Number.isFinite(orderLat) || !Number.isFinite(orderLon)) continue;
+      L.circleMarker([orderLat, orderLon], { radius: 7, color: '#dc2626', fillColor: '#ef4444', fillOpacity: 0.9 })
+        .bindPopup(`${order.customer_first_name} ${order.customer_last_name}<br>ออเดอร์ #${order.order_id}<br>${Number(order.distance_km).toFixed(2)} กม.`)
+        .addTo(this.nearbyLayer);
+    }
+    this.map.setView([latitude, longitude], this.map.getZoom());
   }
 
   // ---------- load ----------
