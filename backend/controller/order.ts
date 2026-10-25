@@ -311,7 +311,7 @@ orderRouter.delete("/", async (_req, res) => {
 orderRouter.get("/nearby", async (req, res) => {
   const latitude = Number(req.query.latitude);
   const longitude = Number(req.query.longitude);
-  const radiusKm = 2;
+  const radiusKm = 3;
 
   if (
     !Number.isFinite(latitude) ||
