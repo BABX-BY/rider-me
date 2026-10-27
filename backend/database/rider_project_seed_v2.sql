@@ -91,7 +91,6 @@ CREATE TABLE orders (
             'CANCELLED'
         )
     ),
-    is_simulated BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

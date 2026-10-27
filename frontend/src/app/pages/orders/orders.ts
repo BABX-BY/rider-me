@@ -202,9 +202,8 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
 
   protected async simulateOrders(): Promise<void> {
     const currentCount = this.orders().length;
-    const availableSlots = MAX_ORDERS - currentCount;
-    if (availableSlots < 20) {
-      this.notification.set({ type: 'error', message: `เหลือพื้นที่สำหรับออร์เดอร์ ${availableSlots} รายการ ต้องเหลืออย่างน้อย 20 รายการเพื่อจำลองออร์เดอร์` });
+    if (currentCount >= 20) {
+      this.notification.set({ type: 'error', message: `วันนี้มีออเดอร์ ${currentCount} รายการแล้ว (ช่วงเป้าหมาย 20–30) จึงไม่เพิ่มข้อมูลซ้ำ` });
       return;
     }
     if (this.customers().length === 0) {
@@ -212,8 +211,8 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    const maxBatchSize = Math.min(30, availableSlots);
-    const amount = 20 + Math.floor(Math.random() * (maxBatchSize - 19));
+    const targetCount = 20 + Math.floor(Math.random() * 11);
+    const amount = Math.min(targetCount - currentCount, MAX_ORDERS - currentCount);
     this.savingOrder.set(true);
     this.notification.set(null);
     try {
@@ -419,7 +418,9 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected async clearOrders(): Promise<void> {
-    const confirmed = window.confirm('ล้างออร์เดอร์จำลองทั้งหมดใช่ไหม? ออร์เดอร์ปกติจะไม่ถูกลบ');
+    const confirmed = window.confirm(
+      `ยืนยันล้างออเดอร์ที่รอดำเนินการของวันนี้ ${this.orders().filter((order) => order.status === 'PENDING').length} รายการใช่ไหม?\nออเดอร์ที่จัดเส้นทางแล้วจะไม่ถูกลบ`,
+    );
 
     if (!confirmed) {
       return;

@@ -5,7 +5,6 @@ export interface Order {
   box_quantity: number;
   order_date: string;
   status: OrderStatus;
-  is_simulated: boolean;
   created_at: string;
   customer_id: number;
   customer_first_name: string;
