@@ -2,7 +2,7 @@
   <header class="flex flex-wrap items-end justify-between gap-3">
     <div>
       <h1 id="saved-page-title" class="text-2xl font-bold">เส้นทางจัดส่ง</h1>
-      <p class="mt-1 text-base-content/70">ใบงานที่ยืนยันแล้ว · สร้างจากแผนที่เลือกในแท็บวางแผน</p>
+      <p class="mt-1 text-base-content/70">ใบงานวันนี้ · {{ businessDateLabel() }}</p>
     </div>
     <div class="flex gap-2">
       <button type="button" class="btn btn-outline" (click)="refreshRoutes()" [disabled]="loading() || canceling()">

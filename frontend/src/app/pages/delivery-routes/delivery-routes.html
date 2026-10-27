@@ -8,21 +8,14 @@
   }
   <app-saved-delivery-routes (planCanceled)="onPlanCanceled()" />
 } @else {
-  <p class="mb-3 text-sm text-base-content/70">เลือกแผนแล้วกดยืนยัน เพื่อบันทึกลำดับจุดส่งเดียวกันเป็นใบงานให้ไรเดอร์</p>
+  <p class="mb-3 text-sm text-base-content/70">ตรวจออเดอร์ → จัดเส้นทางและเปรียบเทียบ → ยืนยันใบงาน</p>
 <section class="space-y-4" aria-labelledby="page-title">
   <header class="flex flex-wrap items-end justify-between gap-3">
     <div>
       <h1 id="page-title" class="text-2xl font-bold">เส้นทางจัดส่ง</h1>
-      <label class="mt-2 flex items-center gap-2 text-sm text-base-content/70">
-        วันที่จัดส่ง
-        <input
-          type="date"
-          class="input input-bordered input-sm"
-          [value]="selectedDate()"
-          [disabled]="busy()"
-          (change)="onPlanningDateChange($event)"
-        />
-      </label>
+      <p class="mt-2 text-sm text-base-content/70">
+        ออเดอร์วันนี้ · {{ businessDateLabel() }}
+      </p>
     </div>
     <div class="flex gap-2">
       <button
@@ -37,7 +30,7 @@
       <button
         type="button"
         class="btn btn-primary"
-        [disabled]="busy() || !preparedOrders() || !!confirmation()"
+        [disabled]="busy() || !preparedOrders()?.items?.length || savedPlanCount() > 0 || !!confirmation()"
         (click)="calculatePlan()"
       >
         {{ planResult() ? 'คำนวณใหม่' : 'จัดเส้นทาง' }}
@@ -72,6 +65,30 @@
     }
   </div>
 
+  @if (!planResult() && !dataLoading() && !dataError()) {
+    <section class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm" aria-label="ข้อมูลก่อนจัดเส้นทาง">
+      <h2 class="font-semibold">ภาพรวมออเดอร์วันนี้</h2>
+      <dl class="mt-3 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div><dt class="text-sm text-base-content/60">ออเดอร์ทั้งหมด</dt><dd class="mt-1 text-2xl font-semibold">{{ todayOrderCount() }} <small class="text-sm font-normal">รายการ</small></dd></div>
+        <div><dt class="text-sm text-base-content/60">รอจัดเส้นทาง</dt><dd class="mt-1 text-2xl font-semibold">{{ preparedOrders()?.items?.length ?? 0 }} <small class="text-sm font-normal">รายการ</small></dd></div>
+        <div><dt class="text-sm text-base-content/60">กล่องที่รอจัด</dt><dd class="mt-1 text-2xl font-semibold">{{ pendingBoxCount() }} <small class="text-sm font-normal">กล่อง</small></dd></div>
+        <div><dt class="text-sm text-base-content/60">ไรเดอร์พร้อมรับงาน</dt><dd class="mt-1 text-2xl font-semibold">{{ availableRiders().length }} <small class="text-sm font-normal">คน</small></dd></div>
+      </dl>
+      @if (savedPlanCount() > 0) {
+        <p class="mt-3 text-sm">มีใบงานยืนยันแล้ว {{ savedPlanCount() }} ใบ <button class="btn btn-link btn-sm" (click)="view.set('saved')">ดูใบงาน</button></p>
+      } @else if (pendingStops().length > 0) {
+        <p class="mt-3 text-sm text-base-content/70">หมุดสีเทาคือลูกค้าที่รอจัดส่ง กดจัดเส้นทางเพื่อแบ่งงาน คำนวณระยะทาง และเปรียบเทียบต้นทุน</p>
+      } @else {
+        <p class="mt-3 text-sm text-base-content/70">ยังไม่มีออเดอร์พร้อมจัดส่งของวันนี้ <a class="link link-primary" routerLink="/orders">ไปหน้าออเดอร์</a> เพื่อเพิ่มหรือจำลองออเดอร์ แล้วกลับมาโหลดข้อมูลใหม่</p>
+      }
+      @if (preparedOrders()?.rejected?.length) {
+        <details class="mt-3 text-sm text-warning"><summary>ต้องตรวจสอบ {{ preparedOrders()!.rejected.length }} ออเดอร์</summary>
+          @for (order of preparedOrders()!.rejected; track $index) { <p class="mt-1">#{{ order.orderId }} · {{ order.reason }}</p> }
+        </details>
+      }
+    </section>
+  }
+  @if (planResult()) {
   <section
     class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm"
     aria-labelledby="review-title"
@@ -108,7 +125,7 @@
         {{ totals.assignedOrderCount }} ออเดอร์ · {{ totals.assignedBoxCount }} กล่อง ·
         {{ totals.usedRiderCount }} ไรเดอร์ · {{ totals.tripCount }} รอบ
       } @else {
-        กดจัดเส้นทางเพื่อคำนวณงานของวันที่เลือก
+        กดจัดเส้นทางเพื่อคำนวณออเดอร์รอดำเนินการของวันนี้
       }
 
       <span class="mx-2 text-base-content/30" aria-hidden="true">|</span>
@@ -119,9 +136,6 @@
 
     @if (saveError()) {
       <p class="mt-3 text-sm text-error" role="alert">{{ saveError() }}</p>
-    }
-    @if (plan && selectedDate() !== businessDate()) {
-      <p class="mt-2 text-sm text-warning">วันอื่นใช้ทดลองคำนวณได้ การยืนยันใบงานใช้ได้เฉพาะวันที่ {{ businessDate() }} ตามเวลาร้าน</p>
     }
     @if (planError()) {
       <p class="mt-3 text-sm text-error" role="alert">
@@ -263,7 +277,7 @@
     }
 
     @if (plan) {
-      <p class="mt-3 text-xs text-base-content/60">ต้นทุนรวมมีค่าปรับคาดการณ์รวมอยู่แล้ว</p>
+      <p class="mt-3 text-xs text-base-content/60">ต้นทุนรวมอาหาร ค่าส่ง และค่าปรับคาดการณ์ · ระยะทางใช้ Haversine และเวลาประมาณที่ 30 กม./ชม.</p>
 
       @for (warning of plan.warnings; track $index) {
         <p class="mt-2 text-sm text-warning" role="status">
@@ -298,6 +312,8 @@
     }
   </section>
 
+  }
+  @if (planResult() || pendingStops().length > 0) {
   <div class="route-workspace">
     <section
       class="overflow-hidden rounded-box border border-base-300 bg-base-100"
@@ -311,6 +327,7 @@
       <app-route-map
         [store]="planningStore"
         [routes]="routes()"
+        [pendingStops]="pendingStops()"
         [activeRouteId]="activeRouteId()"
         [selectedStopId]="selectedStopId()"
         (stopSelected)="selectStop($event)"
@@ -326,9 +343,10 @@
     >
       <div class="mb-2 flex items-center justify-between gap-2">
         <h2 id="legend-title" class="font-semibold">
-          ไรเดอร์
+          {{ planResult() ? 'ไรเดอร์' : 'ออเดอร์รอจัด' }}
           <span class="ml-1 text-sm font-normal text-base-content/50">
-            {{ usedRiderCount() }} คน · {{ routes().length }} รอบ
+            @if (planResult()) { {{ usedRiderCount() }} คน · {{ routes().length }} รอบ }
+            @else { {{ pendingStops().length }} รายการ }
           </span>
         </h2>
         @if (routes().length > 0) {
@@ -412,20 +430,30 @@
           }
         </div>
         <p class="mt-3 text-xs text-base-content/50">เลือกไรเดอร์เพื่อดูเส้นทางและจุดส่ง</p>
+      } @else if (pendingStops().length > 0) {
+        <ol class="max-h-96 space-y-2 overflow-y-auto">
+          @for (stop of pendingStops(); track stop.id) {
+            <li><button type="button" class="w-full rounded-box border border-base-200 p-3 text-left hover:bg-base-200" [attr.aria-pressed]="selectedStopId() === stop.id" (click)="selectStop(stop.id)">
+              <strong class="text-sm">#{{ stop.id }} · {{ stop.customer }}</strong>
+              <span class="mt-1 block text-xs text-base-content/60">{{ stop.boxes }} กล่อง · {{ stop.address }}</span>
+            </button></li>
+          }
+        </ol>
       } @else {
-        <div class="py-12 text-center text-sm text-base-content/60">
+        <div class="py-8 text-center text-sm text-base-content/60">
           @if (dataLoading()) {
             <p>กำลังโหลดข้อมูลจัดส่ง...</p>
           } @else if (planResult()) {
             <p>ยังไม่มีออเดอร์ที่มอบหมายให้ไรเดอร์ได้</p>
           } @else {
-            <p>กดจัดเส้นทางเพื่อแสดงไรเดอร์และจุดส่ง</p>
+            <p>ไม่มีออเดอร์รอจัดของวันนี้</p>
           }
         </div>
       }
     </aside>
   </div>
 
+  }
   <details class="rounded-box border border-base-300 bg-base-100">
     <summary class="cursor-pointer px-4 py-3 text-sm font-medium">เงื่อนไขการจัดส่ง</summary>
     <dl class="rules-grid px-4 pb-4 text-sm">

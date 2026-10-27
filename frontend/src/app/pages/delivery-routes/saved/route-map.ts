@@ -1,3 +1,4 @@
+import { getRoadRoute } from '../map/road-route';
 import {
   AfterViewInit,
   Component,
@@ -39,6 +40,9 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
   private readonly stopMarkers = new Map<number, L.Marker>();
   private readonly roadRoutes = new Map<number, L.LatLngTuple[]>();
   private roadRequestId = 0;
+  private roadAbort?: AbortController;
+  protected readonly roadLoading = signal(false);
+  protected readonly roadFailed = signal(false);
 
   protected get visibleRoutes(): readonly PreviewRoute[] {
     return this.activeRouteId === null
@@ -121,6 +125,7 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
 
   ngOnDestroy(): void {
     this.basemapAbort.abort();
+    this.roadAbort?.abort();
     this.resizeObserver?.disconnect();
     this.map?.remove();
     this.map = undefined;
@@ -156,10 +161,11 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
       const straightPositions: L.LatLngTuple[] = [
         storePosition,
         ...stops.map((stop): L.LatLngTuple => [stop.latitude, stop.longitude]),
+        storePosition,
       ];
       const positions = this.roadRoutes.get(route.id) ?? straightPositions;
       if (stops.length) {
-        L.polyline(positions, { color: route.color, weight: 4, opacity: 0.8 }).addTo(
+        L.polyline(positions, { color: route.color, weight: 4, opacity: 0.8, ...(this.roadRoutes.has(route.id) ? {} : { dashArray: '6 8' }) }).addTo(
           this.routeLayer,
         );
       }
@@ -184,7 +190,7 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
             this.createPopup(stop.customer, [
               `จุดส่ง ${stop.sequence} · ${route.name}`,
               stop.address,
-              `${stop.boxes} กล่อง · เวลาถึงตัวอย่าง ${stop.eta} น.`,
+              `${stop.boxes} กล่อง · คาดว่าถึง ${stop.eta} น.`,
             ]),
           )
           .addTo(this.routeLayer);
@@ -224,47 +230,31 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
 
   private async loadRoadRoutes(routes: readonly PreviewRoute[]): Promise<void> {
     const requestId = ++this.roadRequestId;
-    const storePosition = this.storePosition();
+    this.roadAbort?.abort();
+    const request = new AbortController();
+    this.roadAbort = request;
     this.roadRoutes.clear();
-
-    await Promise.all(
-      routes.map(async (route) => {
-        const stops = route.stops.filter((stop) =>
-          this.validPosition(stop.latitude, stop.longitude),
-        );
+    this.roadLoading.set(routes.length > 0);
+    this.roadFailed.set(false);
+    const storePosition = this.storePosition();
+    for (let index = 0; index < routes.length; index += 3) {
+      if (request.signal.aborted) return;
+      await Promise.all(routes.slice(index, index + 3).map(async (route) => {
+        const stops = route.stops.filter((stop) => this.validPosition(stop.latitude, stop.longitude));
         if (!stops.length) return;
-
-        const coordinates = [
-          storePosition,
-          ...stops.map((stop): L.LatLngTuple => [stop.latitude, stop.longitude]),
-        ]
-          .map(([latitude, longitude]) => `${longitude},${latitude}`)
-          .join(';');
-
         try {
-          const response = await fetch(
-            `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=false`,
-          );
-          if (!response.ok) return;
-          const payload = (await response.json()) as {
-            code?: string;
-            routes?: Array<{ geometry?: { coordinates?: number[][] } }>;
-          };
-          const geometry = payload.routes?.[0]?.geometry?.coordinates;
-          if (payload.code !== 'Ok' || !geometry?.length) return;
-
-          const roadPositions = geometry
-            .filter((coordinate) => coordinate.length >= 2)
-            .map(([longitude, latitude]) => [latitude, longitude] as L.LatLngTuple)
-            .filter(([latitude, longitude]) => this.validPosition(latitude, longitude));
-          if (roadPositions.length > 1) this.roadRoutes.set(route.id, roadPositions);
-        } catch (error) {
-          console.warn(`ไม่สามารถหาเส้นทางตามถนนของ Route ${route.id} ได้`, error);
+          const points: L.LatLngTuple[] = [storePosition,
+            ...stops.map((stop): L.LatLngTuple => [stop.latitude, stop.longitude]), storePosition];
+          const road = await getRoadRoute(points, request.signal);
+          if (!request.signal.aborted) this.roadRoutes.set(route.id, road);
+        } catch {
+          if (!request.signal.aborted) this.roadFailed.set(true);
         }
-      }),
-    );
-
+      }));
+      if (!request.signal.aborted) this.renderRoutes();
+    }
     if (this.map && requestId === this.roadRequestId) {
+      this.roadLoading.set(false);
       this.renderRoutes();
       this.fitRoutes(this.visibleRoutes);
     }

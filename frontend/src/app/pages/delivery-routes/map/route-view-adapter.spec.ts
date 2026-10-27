@@ -23,6 +23,7 @@ function order(id: number): Order {
     order_date: '2026-10-11',
     status: 'PENDING',
     created_at: '2026-10-11T03:00:00Z',
+    is_simulated: true,
     customer_first_name: 'ลูกค้าทดสอบ',
     customer_last_name: 'คนเดิม',
     customer_phone: '0000000000',
