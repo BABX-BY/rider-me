@@ -46,6 +46,9 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
   protected readonly pendingCount = computed(
     () => this.orders().filter((order) => order.status === 'PENDING').length,
   );
+  protected readonly pendingSimulatedCount = computed(
+    () => this.orders().filter((order) => order.is_simulated && order.status === 'PENDING').length,
+  );
 
   protected readonly loading = signal(true);
   protected readonly errorMessage = signal('');
@@ -166,18 +169,22 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
       this.nearbyForm.longitude.trim() === '' ||
       !Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
       !Number.isFinite(longitude) || longitude < -180 || longitude > 180 ||
-      !Number.isFinite(this.nearbyRadiusKm) || this.nearbyRadiusKm <= 0 || this.nearbyRadiusKm > 3
+      !Number.isFinite(this.nearbyRadiusKm) || this.nearbyRadiusKm < 1 || this.nearbyRadiusKm > 3
     ) {
-      this.nearbyError.set('กรุณากรอกพิกัดให้ถูกต้อง และกำหนดรัศมีมากกว่า 0 ถึง 3 กม.');
+      this.nearbyError.set('กรุณากรอกพิกัดให้ถูกต้อง และกำหนดรัศมีตั้งแต่ 1 ถึง 3 กม.');
       this.nearbyOrders.set(null);
       return;
     }
 
     this.nearbyLoading.set(true);
     this.nearbyError.set('');
+    // ย้ายแผนที่ไปยังพิกัดที่เพิ่งกรอกทันที และเอาผลค้นหาครั้งก่อนออก
+    // เพื่อไม่ให้หมุดเก่าดูเหมือนเป็นผลของพิกัดใหม่ระหว่างรอ API
+    this.nearbyOrders.set(null);
+    this.renderNearbyMap();
 
     try {
-      const results = await this.orderApi.getNearbyOrders(latitude, longitude);
+      const results = await this.orderApi.getNearbyOrders(latitude, longitude, this.nearbyRadiusKm);
       this.nearbyOrders.set(results.filter((order) => Number(order.distance_km) <= this.nearbyRadiusKm));
       this.renderNearbyMap();
     } catch (error) {
@@ -419,7 +426,7 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
 
   protected async clearOrders(): Promise<void> {
     const confirmed = window.confirm(
-      `ยืนยันล้างออเดอร์ที่รอดำเนินการของวันนี้ ${this.orders().filter((order) => order.status === 'PENDING').length} รายการใช่ไหม?\nออเดอร์ที่จัดเส้นทางแล้วจะไม่ถูกลบ`,
+      `ยืนยันล้างออร์เดอร์จำลองที่รอดำเนินการวันนี้ ${this.pendingSimulatedCount()} รายการใช่ไหม?\nออร์เดอร์ปกติและออร์เดอร์ที่อยู่ในใบงานจะไม่ถูกลบ`,
     );
 
     if (!confirmed) {

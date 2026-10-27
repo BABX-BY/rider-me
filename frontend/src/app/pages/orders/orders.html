@@ -10,13 +10,13 @@
       <button type="button" class="btn btn-outline" [disabled]="busy || savingOrder()" (click)="simulateOrders()">
         จำลองออเดอร์
       </button>
-      <button type="button" class="btn btn-error btn-outline" [disabled]="busy || orders().length === 0"
+      <button type="button" class="btn btn-error btn-outline" [disabled]="busy || pendingSimulatedCount() === 0"
         (click)="clearOrders()">
         @if (clearingOrders()) {
         <span class="loading loading-spinner loading-xs"></span>
         กำลังล้าง...
         } @else {
-          ล้างออเดอร์รอส่งวันนี้
+          ล้างออร์เดอร์จำลองวันนี้ ({{ pendingSimulatedCount() }})
         }
       </button>
 
@@ -42,7 +42,7 @@
           <label class="form-control">
             <span class="label-text mb-1">รัศมี (กม.)</span>
             <input class="input input-bordered w-full" type="number" name="nearbyRadiusKm"
-              [(ngModel)]="nearbyRadiusKm" (ngModelChange)="onNearbyRadiusChange()" min="0.01" max="3" step="any" required />
+              [(ngModel)]="nearbyRadiusKm" (ngModelChange)="onNearbyRadiusChange()" min="1" max="3" step="any" required />
           </label>
           <label class="form-control">
             <span class="label-text mb-1">ละติจูด</span>
@@ -146,7 +146,10 @@
         <tbody>
           @for (order of orders(); track order.order_id) {
           <tr class="hover">
-            <td class="font-mono text-base-content/70">{{ order.order_id }}</td>
+            <td class="font-mono text-base-content/70">
+              {{ order.order_id }}
+              @if (order.is_simulated) { <span class="badge badge-secondary badge-xs ml-1">จำลอง</span> }
+            </td>
 
             <td>
               <div class="flex items-center gap-3">

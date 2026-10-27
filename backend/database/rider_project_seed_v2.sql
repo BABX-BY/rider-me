@@ -2,7 +2,7 @@
 -- PostgreSQL 14+ / UTF-8 / one simulated store
 -- WARNING: running this script drops and recreates all six project tables.
 -- Seed data: 1 store, 10 synthetic riders and 27 synthetic customers. Names and phone numbers are fictitious.
--- orders, route_plans and route_stops are created with the existing schema but left empty.
+-- Includes sample orders and selected route worksheets for testing.
 -- Identity columns are omitted from INSERT statements so PostgreSQL generates IDs.
 -- Store test point: road-side location on/near หน้า HS - ศาลหลักเมือง, Kham Riang.
 --   The Demo School address and mapped point are recorded by OpenStreetMap/Mapcarta:
@@ -91,6 +91,7 @@ CREATE TABLE orders (
             'CANCELLED'
         )
     ),
+    is_simulated BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -643,6 +644,20 @@ VALUES
     (9, 9, 23, 2, 0.80, CURRENT_TIMESTAMP + INTERVAL '14 minutes', 'PENDING'),
     (10, 10, 24, 1, 0.70, CURRENT_TIMESTAMP + INTERVAL '11 minutes', 'PENDING'),
     (10, 10, 25, 2, 1.20, CURRENT_TIMESTAMP + INTERVAL '18 minutes', 'PENDING');
+
+-- Orders already attached to selected rider worksheets must not remain editable PENDING orders.
+UPDATE orders AS order_row
+SET status = 'ASSIGNED'
+WHERE order_row.status = 'PENDING'
+  AND EXISTS (
+      SELECT 1
+      FROM route_stops AS route_stop
+      INNER JOIN route_plans AS route_plan
+          ON route_plan.route_plan_id = route_stop.route_plan_id
+      WHERE route_stop.order_id = order_row.order_id
+        AND route_plan.status = 'SELECTED'
+        AND route_stop.delivery_status = 'PENDING'
+  );
 
 DO $$
 DECLARE
