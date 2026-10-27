@@ -10,13 +10,13 @@
       <button type="button" class="btn btn-outline" [disabled]="busy || savingOrder()" (click)="simulateOrders()">
         จำลองออเดอร์
       </button>
-      <button type="button" class="btn btn-error btn-outline" [disabled]="busy || orders().length === 0"
+      <button type="button" class="btn btn-error btn-outline" [disabled]="busy"
         (click)="clearOrders()">
         @if (clearingOrders()) {
         <span class="loading loading-spinner loading-xs"></span>
         กำลังล้าง...
         } @else {
-          ล้างออเดอร์รอส่งวันนี้
+          ล้างออร์เดอร์จำลองทั้งหมด
         }
       </button>
 

@@ -13,6 +13,7 @@ orderRouter.get("/", async (req, res) => {
         o.box_quantity,
         o.order_date,
         o.status,
+        o.is_simulated,
         o.created_at,
         c.customer_id,
         c.first_name AS customer_first_name,
@@ -46,7 +47,7 @@ orderRouter.post("/simulate", async (req, res) => {
   }));
 
   if (
-    items.length === 0 ||
+    items.length < 20 ||
     items.length > 30 ||
     items.some(
       (item) =>
@@ -85,18 +86,19 @@ orderRouter.post("/simulate", async (req, res) => {
     }
 
     const values = items.flatMap((item) => [item.customerId, item.boxQuantity]);
-    const placeholders = items.map((_: { customerId: number; boxQuantity: number }, index: number) => `($${index * 2 + 1}, $${index * 2 + 2}, ${BUSINESS_DATE_SQL})`);
+    const placeholders = items.map((_: { customerId: number; boxQuantity: number }, index: number) => `($${index * 2 + 1}, $${index * 2 + 2}, ${BUSINESS_DATE_SQL}, TRUE)`);
     const result = await client.query(
       `WITH inserted AS (
-         INSERT INTO orders (customer_id, box_quantity, order_date)
+         INSERT INTO orders (customer_id, box_quantity, order_date, is_simulated)
          VALUES ${placeholders.join(", ")}
-         RETURNING order_id, customer_id, box_quantity, order_date, status, created_at
+         RETURNING order_id, customer_id, box_quantity, order_date, status, is_simulated, created_at
        )
        SELECT
          inserted.order_id,
          inserted.box_quantity,
          inserted.order_date,
          inserted.status,
+         inserted.is_simulated,
          inserted.created_at,
          customer.customer_id,
          customer.first_name AS customer_first_name,
@@ -182,6 +184,7 @@ orderRouter.post("/", async (req, res) => {
         o.box_quantity,
         o.order_date,
         o.status,
+        o.is_simulated,
         o.created_at,
         c.customer_id,
         c.first_name AS customer_first_name,
@@ -270,6 +273,7 @@ orderRouter.patch("/:id", async (req, res) => {
         o.box_quantity,
         o.order_date,
         o.status,
+        o.is_simulated,
         o.created_at,
         c.customer_id,
         c.first_name AS customer_first_name,
@@ -369,14 +373,13 @@ orderRouter.delete("/", async (_req, res) => {
     const result = await pool.query(
       `
       DELETE FROM orders
-      WHERE order_date = ${BUSINESS_DATE_SQL}
-        AND status = 'PENDING'
+      WHERE is_simulated = TRUE
       RETURNING order_id
       `,
     );
 
     res.status(200).json({
-      message: "ล้างออเดอร์ที่รอดำเนินการของวันนี้สำเร็จ",
+      message: "ล้างรายการออร์เดอร์จำลองทั้งหมดสำเร็จ",
       deleted_count: result.rowCount ?? 0,
     });
   } catch (error: unknown) {
@@ -425,6 +428,7 @@ orderRouter.get("/nearby", async (req, res) => {
           o.box_quantity,
           o.order_date,
           o.status,
+          o.is_simulated,
           o.created_at,
           c.customer_id,
           c.first_name AS customer_first_name,
