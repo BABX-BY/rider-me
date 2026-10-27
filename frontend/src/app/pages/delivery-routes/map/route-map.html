@@ -24,10 +24,10 @@
       </svg>
       จัดมุมมองแผนที่
     </button>
-    @if (visibleRoutes.length === 0) {
+    @if (visibleRoutes.length === 0 && pendingStops.length === 0) {
       <div class="delivery-map__empty" role="status">
-        <strong>ยังไม่มีเส้นทาง</strong>
-        <span>เมื่อมีผลการจัดเส้นทาง จุดส่งและลำดับการเดินทางจะแสดงบนแผนที่นี้</span>
+        <strong>ยังไม่มีออเดอร์รอจัดเส้นทาง</strong>
+        <span>เพิ่มออเดอร์ที่หน้าออเดอร์ แล้วกดโหลดข้อมูลใหม่</span>
       </div>
     }
     @if (tileError()) {
@@ -38,13 +38,17 @@
   </div>
   <div class="delivery-map__footer">
     <span
-      >เลื่อนล้อเมาส์เพื่อซูม · เส้นประ: กลับร้าน
+      >เลื่อนล้อเมาส์เพื่อซูม · {{ routes.length ? 'เส้นสี: ตามถนนรวมทางกลับร้าน' : 'หมุดสีเทา: ออเดอร์รอจัดเส้นทาง' }}
       @if (usingFallback()) {
         <span role="status" title="MapTiler โหลดไม่ได้ จึงใช้ OpenStreetMap สำรอง">
           · ใช้แผนที่สำรอง</span
         >
       }
     </span>
-    <span>เส้นตรงเชื่อมพิกัด ระยะทางและเวลาประมาณจากพิกัด ไม่ใช่เส้นทางตามถนน</span>
+    <span role="status">
+      @if (roadLoading()) { กำลังโหลดเส้นทางตามถนน... }
+      @else if (roadFailed()) { บริการถนนบางเส้นทางขัดข้อง ใช้เส้นประเชื่อมพิกัดสำรอง }
+      @else if (routes.length) { เส้นทางจาก OSRM · ระยะและต้นทุนในสรุปประมาณจากพิกัด }
+    </span>
   </div>
 </div>

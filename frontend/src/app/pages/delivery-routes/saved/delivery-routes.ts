@@ -18,6 +18,10 @@ export class SavedDeliveryRoutes {
   protected readonly canceling = signal(false);
   protected readonly errorMessage = signal('');
   protected readonly dataNotice = signal('');
+  protected readonly businessDate = signal('');
+  protected readonly businessDateLabel = computed(() =>
+    this.businessDate() ? this.formatDateLabel(this.businessDate()) : 'กำลังโหลดวันที่ของร้าน...',
+  );
   protected readonly activeRouteId = signal<number | null>(null);
   protected readonly selectedStopId = signal<number | null>(null);
   protected readonly store = signal<PreviewStore | null>(null);
@@ -95,11 +99,15 @@ export class SavedDeliveryRoutes {
 
   private async loadRoutes(): Promise<void> {
     this.loading.set(true);
+    this.showAllRoutes();
     this.errorMessage.set('');
     this.dataNotice.set('');
     try {
-      const today = this.today();
-      const plans = await this.routeApi.getRoutePlans(today);
+      const context = await this.routeApi.getPlanningStore();
+      const today = context.businessDate;
+      this.businessDate.set(today);
+      const records = await this.routeApi.getRoutePlans(today, '');
+      const plans = records.filter((plan) => plan.status === 'SELECTED' || plan.status === 'COMPLETED');
       if (plans.length === 0) {
         this.dataNotice.set(`ยังไม่มีใบงานของวันที่ ${this.formatDateLabel(today)}`);
       }
@@ -128,6 +136,7 @@ export class SavedDeliveryRoutes {
       this.errorMessage.set('ไม่สามารถโหลดข้อมูลเส้นทางจาก Backend ได้');
       this.routes.set([]);
       this.store.set(null);
+      this.businessDate.set('');
     } finally {
       this.loading.set(false);
     }
@@ -171,10 +180,6 @@ export class SavedDeliveryRoutes {
         eta: this.formatTime(stop.estimated_arrival),
       })),
     };
-  }
-
-  private today(): string {
-    return toBangkokDateKey(new Date()) ?? '';
   }
 
   private formatTime(value: string | null | undefined): string {

@@ -29,6 +29,7 @@ const orders: Order[] = [101, 102].map((id, index) => ({
   order_date: date,
   status: 'PENDING',
   created_at: date + 'T03:00:00Z',
+  is_simulated: true,
   customer_first_name: `ลูกค้า ${id}`,
   customer_last_name: 'ทดสอบ',
   customer_phone: '0000000000',
@@ -47,7 +48,8 @@ const riders: Rider[] = [41, 42].map((id) => ({
 
 class Controller extends DeliveryRoutes {
   readonly state = {
-    date: this.selectedDate,
+    date: this.businessDate,
+    dateLabel: this.businessDateLabel,
     loading: this.dataLoading,
     dataError: this.dataError,
     prepared: this.preparedOrders,
@@ -67,6 +69,10 @@ class Controller extends DeliveryRoutes {
     saveError: this.saveError,
     view: this.view,
     businessDate: this.businessDate,
+    pendingStops: this.pendingStops,
+    pendingBoxes: this.pendingBoxCount,
+    totalOrders: this.todayOrderCount,
+    savedPlans: this.savedPlanCount,
   };
 
   confirm(): Promise<void> { return this.confirmPlan(); }
@@ -87,18 +93,14 @@ class Controller extends DeliveryRoutes {
     this.selectStop(id);
   }
 
-  changeDate(value: string): void {
-    const input = document.createElement('input');
-    input.type = 'date';
-    input.value = value;
-    this.onPlanningDateChange({ target: input } as unknown as Event);
-  }
+
 }
 
 describe('delivery route plan selection', () => {
   const getOrders = vi.fn<() => Promise<Order[]>>();
   const getRiders = vi.fn<() => Promise<Rider[]>>();
   const getPlanningStore = vi.fn();
+  const getRoutePlans = vi.fn();
   const confirmSelectedPlan = vi.fn();
   let controller: Controller;
   let alternatives: RoutePlanAlternative[];
@@ -107,6 +109,7 @@ describe('delivery route plan selection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getOrders.mockReset().mockResolvedValue(orders);
+    getRoutePlans.mockReset().mockResolvedValue([]);
     getRiders.mockReset().mockResolvedValue(riders);
     getPlanningStore.mockReset().mockResolvedValue({
       businessDate: date,
@@ -143,12 +146,11 @@ describe('delivery route plan selection', () => {
       providers: [
         { provide: OrderApi, useValue: { getOrders } },
         { provide: RiderApi, useValue: { getRiders } },
-        { provide: RouteApi, useValue: { getPlanningStore, confirmSelectedPlan } },
+        { provide: RouteApi, useValue: { getPlanningStore, confirmSelectedPlan, getRoutePlans } },
       ],
     });
     destroyInjector = () => injector.destroy();
     controller = runInInjectionContext(injector, () => new Controller());
-    controller.state.date.set(date);
   });
 
   afterEach(() => {
@@ -160,6 +162,8 @@ describe('delivery route plan selection', () => {
     await controller.calculate();
 
     expect(getOrders).toHaveBeenCalledTimes(1);
+    expect(getOrders).toHaveBeenCalledWith(date);
+    expect(controller.state.date()).toBe(date);
     expect(getRiders).toHaveBeenCalledTimes(1);
     expect(buildRoutePlanAlternatives).toHaveBeenCalledTimes(1);
     expect(buildRoutePlanAlternatives).toHaveBeenCalledWith(
@@ -234,21 +238,48 @@ describe('delivery route plan selection', () => {
     expect(buildRoutePlanAlternatives).toHaveBeenCalledTimes(1);
   });
 
-  it('invalidates the pool when the selected date changes', async () => {
+  it('uses the new backend business day on reload and discards the previous plan', async () => {
     await controller.calculate();
     controller.chooseStop(101);
-
-    controller.changeDate('2026-10-26');
-    expect(controller.state.date()).toBe('2026-10-26');
+    getPlanningStore.mockResolvedValue({
+      businessDate: '2026-10-26',
+      store: { store_id: store.id, store_name: store.name, latitude: store.latitude, longitude: store.longitude },
+    });
+    const pending = controller.reload();
     expect(controller.state.result()).toBeNull();
     expect(controller.state.alternatives()).toEqual([]);
     expect(controller.state.activeRouteId()).toBeNull();
     expect(controller.state.selectedStopId()).toBeNull();
-    await vi.waitFor(() => expect(controller.state.loading()).toBe(false));
-
+    await pending;
+    expect(controller.state.date()).toBe('2026-10-26');
+    expect(getOrders).toHaveBeenLastCalledWith('2026-10-26');
     expect(controller.state.prepared()!.items).toEqual([]);
     expect(getOrders).toHaveBeenCalledTimes(2);
     expect(buildRoutePlanAlternatives).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for the backend date before requesting orders', async () => {
+    let finish!: (value: unknown) => void;
+    getPlanningStore.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const pending = controller.reload();
+    expect(getOrders).not.toHaveBeenCalled();
+    expect(controller.state.canConfirm()).toBe(false);
+    finish({ businessDate: date, store: {
+      store_id: store.id, store_name: store.name, latitude: store.latitude, longitude: store.longitude,
+    } });
+    await pending;
+    expect(getOrders).toHaveBeenCalledWith(date);
+    expect(controller.state.date()).toBe(date);
+    expect(controller.state.prepared()!.items).toHaveLength(2);
+  });
+
+  it('does not use the browser day if the backend date cannot be loaded', async () => {
+    getPlanningStore.mockRejectedValue(new Error('offline'));
+    await controller.calculate();
+    expect(getOrders).not.toHaveBeenCalled();
+    expect(controller.state.dataError()).toContain('โหลดข้อมูลวางแผนไม่สำเร็จ');
+    expect(controller.state.date()).toBe('');
+    expect(controller.state.canConfirm()).toBe(false);
   });
 
   it('retains a singleton plan and reports that no other distinct plan was found', async () => {
@@ -279,13 +310,13 @@ describe('delivery route plan selection', () => {
     expect(buildRoutePlanAlternatives).not.toHaveBeenCalled();
   });
 
-  it('does not build plans when no orders are eligible for the selected date', async () => {
+  it('does not build plans when today has no pending orders', async () => {
     getOrders.mockResolvedValue(orders.map((order) => ({ ...order, status: 'DELIVERED' })));
 
     await controller.calculate();
 
     expect(controller.state.dataError()).toBe('');
-    expect(controller.state.planError()).toContain('ไม่มีออเดอร์พร้อมจัดส่ง');
+    expect(controller.state.planError()).toContain('ยังไม่มีออเดอร์รอดำเนินการของวันนี้');
     expect(controller.state.result()).toBeNull();
     expect(controller.state.alternatives()).toEqual([]);
     expect(controller.state.routes()).toEqual([]);
@@ -311,14 +342,13 @@ describe('delivery route plan selection', () => {
     expect(confirmSelectedPlan).toHaveBeenCalledTimes(1);
   });
 
-  it('locks date, reload, plan selection and duplicate submits while confirming', async () => {
+  it('locks reload, plan selection and duplicate submits while confirming', async () => {
     await controller.calculate();
     let finish!: (value: unknown) => void;
     confirmSelectedPlan.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     const pending = controller.confirm();
     expect(controller.state.saving()).toBe(true);
     controller.choose('two-riders');
-    controller.changeDate('2026-10-26');
     await controller.reload();
     await controller.confirm();
     expect(controller.state.date()).toBe(date);
@@ -330,10 +360,10 @@ describe('delivery route plan selection', () => {
     expect(controller.state.saving()).toBe(false);
   });
 
-  it('does not submit a historical plan or an empty plan', async () => {
+  it('does not submit an empty plan or a plan without a loaded business day', async () => {
     await controller.confirm();
     await controller.calculate();
-    controller.state.businessDate.set('2026-10-26');
+    controller.state.businessDate.set('');
     expect(controller.state.canConfirm()).toBe(false);
     await controller.confirm();
     expect(confirmSelectedPlan).not.toHaveBeenCalled();
@@ -348,6 +378,36 @@ describe('delivery route plan selection', () => {
     expect(controller.state.result()).toBe(alternatives[0].result);
     expect(controller.state.view()).toBe('planning');
     expect(controller.state.saving()).toBe(false);
+  });
+
+  it('shows pending customer pins and box totals before calculating', async () => {
+    await controller.reload();
+    expect(controller.state.result()).toBeNull();
+    expect(controller.state.totalOrders()).toBe(2);
+    expect(controller.state.pendingBoxes()).toBe(3);
+    expect(controller.state.pendingStops().map((stop) => stop.id)).toEqual([101, 102]);
+    controller.chooseStop(101);
+    expect(controller.state.selectedStopId()).toBe(101);
+  });
+
+  it('opens saved worksheets when all orders have already been assigned', async () => {
+    getOrders.mockResolvedValue(orders.map((order) => ({ ...order, status: 'ASSIGNED' })));
+    getRoutePlans.mockResolvedValue([{ status: 'SELECTED' }, { status: 'COMPLETED' }, { status: 'REJECTED' }]);
+    await controller.reload();
+    expect(controller.state.view()).toBe('saved');
+    expect(controller.state.savedPlans()).toBe(2);
+    expect(controller.state.totalOrders()).toBe(2);
+    expect(controller.state.pendingStops()).toEqual([]);
+    expect(controller.state.canConfirm()).toBe(false);
+    expect(getRoutePlans).toHaveBeenCalledWith(date, '');
+  });
+
+  it('prevents creating another plan over existing worksheets', async () => {
+    getRoutePlans.mockResolvedValue([{ status: 'SELECTED' }]);
+    await controller.calculate();
+    expect(buildRoutePlanAlternatives).not.toHaveBeenCalled();
+    expect(controller.state.planError()).toContain('มีใบงานยืนยันแล้ว');
+    expect(controller.state.canConfirm()).toBe(false);
   });
 
 });

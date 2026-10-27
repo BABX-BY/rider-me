@@ -1,12 +1,13 @@
 import { SavedDeliveryRoutes } from './saved/delivery-routes';
 import { DecimalPipe } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { Component, computed, inject, type OnInit, signal } from '@angular/core';
 import type { Rider } from '../../model/rider.model';
 import { OrderApi } from '../../services/api/order-api';
 import { RiderApi } from '../../services/api/rider-api';
 import { RouteApi, type ConfirmedPlanResponse } from '../../services/api/route-api';
 import { RouteMap } from './map/route-map';
-import { toRouteViews } from './map/route-view-adapter';
+import { toPendingStopViews, toRouteViews } from './map/route-view-adapter';
 import { toSelectedPlanRequest, type PlanningStore } from './planning/plan-persistence';
 import {
   buildRoutePlanAlternatives,
@@ -14,13 +15,12 @@ import {
 } from './planning/route-alternatives';
 import {
   preparePlanningOrders,
-  toBangkokDateKey,
   type PreparedPlanningOrders,
 } from './planning/planning-orders';
 
 @Component({
   selector: 'app-delivery-routes',
-  imports: [RouteMap, DecimalPipe, SavedDeliveryRoutes],
+  imports: [RouteMap, DecimalPipe, SavedDeliveryRoutes, RouterLink],
   templateUrl: './delivery-routes.html',
   styleUrls: ['./delivery-routes.css', './route-legend.css'],
 })
@@ -32,7 +32,14 @@ export class DeliveryRoutes implements OnInit {
 
   protected readonly store = signal<PlanningStore | null>(null);
   protected readonly businessDate = signal('');
-  protected readonly selectedDate = signal(toBangkokDateKey(new Date()) ?? '');
+  protected readonly businessDateLabel = computed(() => {
+    const date = this.businessDate();
+    return date
+      ? new Date(`${date}T00:00:00+07:00`).toLocaleDateString('th-TH', {
+          day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Bangkok',
+        })
+      : 'กำลังโหลดวันที่ของร้าน...';
+  });
   protected readonly dataLoading = signal(false);
   protected readonly saving = signal(false);
   protected readonly busy = computed(() => this.dataLoading() || this.saving());
@@ -40,6 +47,12 @@ export class DeliveryRoutes implements OnInit {
   protected readonly saveError = signal('');
   protected readonly dataError = signal('');
   protected readonly preparedOrders = signal<PreparedPlanningOrders | null>(null);
+  protected readonly todayOrderCount = signal(0);
+  protected readonly savedPlanCount = signal(0);
+  protected readonly pendingStops = computed(() => this.planResult() ? [] : toPendingStopViews(this.preparedOrders()));
+  protected readonly pendingBoxCount = computed(() =>
+    this.preparedOrders()?.items.reduce((sum, item) => sum + item.routing.boxQuantity, 0) ?? 0,
+  );
   protected readonly availableRiders = signal<Rider[]>([]);
   protected readonly planAlternatives = signal<RoutePlanAlternative[]>([]);
   protected readonly selectedAlternativeId = signal<string | null>(null);
@@ -58,7 +71,7 @@ export class DeliveryRoutes implements OnInit {
   );
   protected readonly canConfirm = computed(() =>
     !this.busy() && !this.confirmation() && !!this.store() &&
-    this.selectedDate() === this.businessDate() && (this.planResult()?.trips.length ?? 0) > 0,
+    !!this.businessDate() && this.savedPlanCount() === 0 && (this.planResult()?.trips.length ?? 0) > 0,
   );
 
   protected readonly activeRouteId = signal<number | null>(null);
@@ -74,24 +87,8 @@ export class DeliveryRoutes implements OnInit {
     void this.loadPlanningData();
   }
 
-  protected onPlanningDateChange(event: Event): void {
-    if (this.busy()) return;
-
-    const input = event.target as HTMLInputElement;
-
-    if (!input.value) {
-      input.value = this.selectedDate();
-      return;
-    }
-
-    this.selectedDate.set(input.value);
-    void this.loadPlanningData();
-  }
-
   protected async loadPlanningData(): Promise<void> {
     if (this.busy()) return;
-
-    const date = this.selectedDate();
 
     this.planAlternatives.set([]);
     this.selectedAlternativeId.set(null);
@@ -106,13 +103,17 @@ export class DeliveryRoutes implements OnInit {
     this.businessDate.set('');
     this.confirmation.set(null);
     this.saveError.set('');
+    this.todayOrderCount.set(0);
+    this.savedPlanCount.set(0);
 
     try {
-      // ใช้ร้านเดียวกับ Backend และอ่านออเดอร์เฉพาะวันที่เลือก
-      const [orders, riders, context] = await Promise.all([
+      // Backend เป็นผู้กำหนดวันของร้าน เหมือนหน้าออเดอร์ ไม่อิงนาฬิกาหรือวันที่จากผู้ใช้
+      const context = await this.routeApi.getPlanningStore();
+      const date = context.businessDate;
+      const [orders, riders, savedPlans] = await Promise.all([
         this.orderApi.getOrders(date),
         this.riderApi.getRiders(),
-        this.routeApi.getPlanningStore(),
+        this.routeApi.getRoutePlans(date, ''),
       ]);
 
       const store = {
@@ -129,6 +130,10 @@ export class DeliveryRoutes implements OnInit {
       this.availableRiders.set(available);
       this.store.set(store);
       this.businessDate.set(context.businessDate);
+      this.todayOrderCount.set(orders.length);
+      const confirmedPlans = savedPlans.filter((plan) => plan.status === 'SELECTED' || plan.status === 'COMPLETED');
+      this.savedPlanCount.set(confirmedPlans.length);
+      if (confirmedPlans.length > 0 && prepared.items.length === 0) this.view.set('saved');
     } catch (error) {
       console.error('โหลดข้อมูลจัดส่งไม่สำเร็จ', error);
       this.dataError.set('โหลดข้อมูลวางแผนไม่สำเร็จ กรุณาตรวจว่า Backend รองรับ API planning-store แล้วลองอีกครั้ง');
@@ -164,9 +169,13 @@ export class DeliveryRoutes implements OnInit {
     const prepared = this.preparedOrders();
     const store = this.store();
     if (!prepared || !store) return;
+    if (this.savedPlanCount() > 0) {
+      this.planError.set('มีใบงานยืนยันแล้ว กรุณาดูใบงานเดิม หากต้องจัดใหม่ให้ยกเลิกใบงานที่ยังไม่เริ่มส่งก่อน');
+      return;
+    }
 
     if (prepared.items.length === 0) {
-      this.planError.set('ไม่มีออเดอร์พร้อมจัดส่งในวันที่เลือก');
+      this.planError.set('ยังไม่มีออเดอร์รอดำเนินการของวันนี้ กรุณาเพิ่มออเดอร์ที่หน้าออเดอร์แล้วโหลดข้อมูลใหม่');
       return;
     }
 
@@ -211,7 +220,7 @@ export class DeliveryRoutes implements OnInit {
     this.saveError.set('');
     try {
       const result = await this.routeApi.confirmSelectedPlan(
-        toSelectedPlanRequest(store, this.selectedDate(), plan),
+        toSelectedPlanRequest(store, this.businessDate(), plan),
       );
       this.confirmation.set(result);
       this.view.set('saved');
@@ -246,6 +255,8 @@ export class DeliveryRoutes implements OnInit {
 
     if (route) {
       this.activeRouteId.set(route.id);
+      this.selectedStopId.set(id);
+    } else if (this.pendingStops().some((stop) => stop.id === id)) {
       this.selectedStopId.set(id);
     }
   }

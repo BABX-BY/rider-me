@@ -2,7 +2,23 @@ import type { Rider } from '../../../model/rider.model';
 import type { PreparedPlanningOrders } from '../planning/planning-orders';
 import type { RoutePlanResult } from '../planning/route-planner';
 import { formatClockTime } from '../planning/route-timing';
-import type { RouteView } from './route-view';
+import type { RouteStopView, RouteView } from './route-view';
+
+export function toPendingStopViews(prepared: PreparedPlanningOrders | null): RouteStopView[] {
+  return (prepared?.items ?? []).map(({ source, routing }) => ({
+    id: routing.orderId,
+    sequence: 0,
+    customer: [source.customer_first_name, source.customer_last_name].filter(Boolean).join(' ') || `ออเดอร์ #${routing.orderId}`,
+    phone: source.customer_phone || '',
+    address: source.customer_address || 'ไม่ได้ระบุที่อยู่',
+    boxes: routing.boxQuantity,
+    latitude: routing.latitude,
+    longitude: routing.longitude,
+    eta: 'ยังไม่ได้จัดเส้นทาง',
+    isLate: false,
+    lateMinutes: 0,
+  }));
+}
 
 const ROUTE_COLORS = [
   '#d94c60',

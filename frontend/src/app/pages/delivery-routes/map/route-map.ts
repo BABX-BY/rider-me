@@ -15,6 +15,7 @@ import {
 import * as L from 'leaflet';
 import { MAPTILER_API_KEY } from '../../../config/map';
 import type { RouteMapStore, RouteStopView, RouteView } from './route-view';
+import { getRoadRoute } from './road-route';
 
 @Component({
   selector: 'app-route-map',
@@ -25,6 +26,7 @@ import type { RouteMapStore, RouteStopView, RouteView } from './route-view';
 export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
   @Input({ required: true }) store!: RouteMapStore;
   @Input() routes: readonly RouteView[] = [];
+  @Input() pendingStops: readonly RouteStopView[] = [];
   @Input() activeRouteId: number | null = null;
   @Input() selectedStopId: number | null = null;
   @Output() readonly stopSelected = new EventEmitter<number>();
@@ -32,6 +34,10 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
 
   protected readonly tileError = signal(false);
   protected readonly usingFallback = signal(false);
+  protected readonly roadLoading = signal(false);
+  protected readonly roadFailed = signal(false);
+  private readonly roadRoutes = new Map<number, L.LatLngTuple[]>();
+  private roadAbort?: AbortController;
   private map?: L.Map;
   private routeLayer?: L.LayerGroup;
   private resizeObserver?: ResizeObserver;
@@ -91,6 +97,7 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
     this.routeLayer = L.layerGroup().addTo(this.map);
     this.renderRoutes();
     this.fitRoutes(this.visibleRoutes);
+    void this.loadRoadRoutes();
 
     this.resizeObserver = new ResizeObserver(() => {
       this.map?.invalidateSize({ pan: false });
@@ -100,12 +107,13 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
 
   ngOnChanges(changes: SimpleChanges): void {
     if (!this.map) return;
-    if (changes['store'] || changes['routes'] || changes['activeRouteId']) {
+    if (changes['store'] || changes['routes'] || changes['activeRouteId'] || changes['pendingStops']) {
       this.renderRoutes();
       this.fitRoutes(this.visibleRoutes);
     } else if (changes['selectedStopId']) {
       this.renderRoutes();
     }
+    if (changes['store'] || changes['routes']) void this.loadRoadRoutes();
     if (this.selectedStopId !== null) {
       const marker = this.stopMarkers.get(this.selectedStopId);
       if (marker) {
@@ -117,6 +125,7 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
 
   ngOnDestroy(): void {
     this.basemapAbort.abort();
+    this.roadAbort?.abort();
     this.resizeObserver?.disconnect();
     this.map?.remove();
     this.map = undefined;
@@ -135,6 +144,10 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
           positions.push([stop.latitude, stop.longitude]);
         }
       }
+      positions.push(...(this.roadRoutes.get(route.id) ?? []));
+    }
+    if (!this.routes.length) {
+      for (const stop of this.pendingStops) positions.push([stop.latitude, stop.longitude]);
     }
     this.map?.fitBounds(positions, { padding: [40, 50], maxZoom: 16, animate: false });
   }
@@ -152,20 +165,15 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
         ...stops.map((stop): L.LatLngTuple => [stop.latitude, stop.longitude]),
       ];
       if (stops.length) {
-        L.polyline(positions, { color: route.color, weight: 4, opacity: 0.8 }).addTo(
-          this.routeLayer,
-        );
-        for (let index = 1; index < positions.length; index++) {
-          this.addDirection(positions[index - 1], positions[index], route.color);
-        }
-        const lastPosition = positions[positions.length - 1];
-        L.polyline([lastPosition, storePosition], {
-          color: route.color,
-          weight: 3,
-          opacity: 0.65,
-          dashArray: '7 8',
+        const road = this.roadRoutes.get(route.id);
+        const line = road ?? [...positions, storePosition];
+        L.polyline(line, { color: route.color, weight: 4, opacity: 0.8,
+          ...(road ? {} : { dashArray: '6 8' }),
         }).addTo(this.routeLayer);
-        this.addDirection(lastPosition, storePosition, route.color);
+        const step = Math.max(1, Math.floor(line.length / 5));
+        for (let index = 1; index < line.length; index += step) {
+          this.addDirection(line[index - 1], line[index], route.color);
+        }
       }
 
       for (const stop of stops) {
@@ -204,6 +212,25 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
       }
     }
 
+    if (!this.routes.length) {
+      for (const stop of this.pendingStops) {
+        if (!this.validPosition(stop.latitude, stop.longitude)) continue;
+        const selected = this.selectedStopId === stop.id;
+        const marker = L.marker([stop.latitude, stop.longitude], {
+          icon: L.divIcon({ className: 'delivery-map__marker',
+            html: this.createStopPin('•', '#64748b', selected).outerHTML,
+            iconSize: [32, 42], iconAnchor: [16, 42], popupAnchor: [0, -40] }),
+          title: `ออเดอร์ #${stop.id} · ${stop.customer} · รอจัดเส้นทาง`,
+          zIndexOffset: selected ? 1000 : 100,
+        }).bindPopup(this.createPopup(stop.customer, [
+          `ออเดอร์ #${stop.id} · ${stop.boxes} กล่อง`, stop.address,
+          ...(stop.phone ? [`โทร: ${stop.phone}`] : []), 'รอจัดเส้นทาง ยังไม่ได้มอบหมายไรเดอร์',
+        ])).addTo(this.routeLayer);
+        marker.on('click', () => this.stopSelected.emit(stop.id));
+        this.stopMarkers.set(stop.id, marker);
+      }
+    }
+
     const storeIcon = document.createElement('span');
     storeIcon.className = 'delivery-map__store-pin';
     storeIcon.textContent = 'ร้าน';
@@ -224,6 +251,36 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
     storeMarker
       .getElement()
       ?.setAttribute('aria-label', `${this.store.name} จุดเริ่มต้นและจุดกลับ`);
+  }
+
+  private async loadRoadRoutes(): Promise<void> {
+    this.roadAbort?.abort();
+    const request = new AbortController();
+    this.roadAbort = request;
+    this.roadRoutes.clear();
+    this.roadFailed.set(false);
+    this.roadLoading.set(this.routes.length > 0);
+    // จำกัดพร้อมกัน 3 เส้นทาง และใช้ cache เพื่อไม่เรียกบริการซ้ำเวลาเลือกไรเดอร์
+    const routes = [...this.routes];
+    for (let index = 0; index < routes.length; index += 3) {
+      if (request.signal.aborted) return;
+      await Promise.all(routes.slice(index, index + 3).map(async (route) => {
+        try {
+          const store: L.LatLngTuple = [this.store.latitude, this.store.longitude];
+          const points: L.LatLngTuple[] = [store, ...route.stops.map(
+            (stop): L.LatLngTuple => [stop.latitude, stop.longitude]), store];
+          const road = await getRoadRoute(points, request.signal);
+          if (!request.signal.aborted) this.roadRoutes.set(route.id, road);
+        } catch {
+          if (!request.signal.aborted) this.roadFailed.set(true);
+        }
+      }));
+      if (!request.signal.aborted) this.renderRoutes();
+    }
+    if (!request.signal.aborted && this.map) {
+      this.roadLoading.set(false);
+      this.fitRoutes(this.visibleRoutes);
+    }
   }
 
   private addDirection(start: L.LatLngTuple, end: L.LatLngTuple, color: string): void {
@@ -278,7 +335,7 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
     return popup;
   }
 
-  private createStopPin(sequence: number, color: string, selected: boolean): SVGSVGElement {
+  private createStopPin(sequence: number | string, color: string, selected: boolean): SVGSVGElement {
     const ns = 'http://www.w3.org/2000/svg';
     const pin = document.createElementNS(ns, 'svg');
     pin.setAttribute('viewBox', '0 0 32 42');
