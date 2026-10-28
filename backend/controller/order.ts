@@ -508,15 +508,15 @@ orderRouter.delete("/", async (_req, res) => {
       `SELECT COUNT(*)::int AS blocked_count
        FROM orders AS order_row
        WHERE order_row.order_date = ${BUSINESS_DATE_SQL}
-         AND order_row.is_simulated = TRUE
-         AND (order_row.status <> 'PENDING' OR EXISTS (
+         AND order_row.status = 'PENDING'
+         AND EXISTS (
            SELECT 1 FROM route_stops AS route_stop WHERE route_stop.order_id = order_row.order_id
-         ))`,
+         )`,
     );
     if (blockedResult.rows[0].blocked_count > 0) {
       await client.query("ROLLBACK");
       res.status(409).json({
-        message: "มีออร์เดอร์จำลองที่ถูกมอบหมายหรือมีจุดส่งในใบงานแล้ว จึงล้างไม่ได้",
+        message: "มีออร์เดอร์รอดำเนินการที่ยังมีจุดส่งในใบงาน จึงล้างไม่ได้",
       });
       return;
     }
@@ -526,7 +526,6 @@ orderRouter.delete("/", async (_req, res) => {
       DELETE FROM orders
       WHERE order_date = ${BUSINESS_DATE_SQL}
         AND status = 'PENDING'
-        AND is_simulated = TRUE
       RETURNING order_id
       `,
     );
@@ -534,7 +533,7 @@ orderRouter.delete("/", async (_req, res) => {
     await client.query("COMMIT");
 
     res.status(200).json({
-      message: "ล้างออร์เดอร์จำลองที่รอดำเนินการของวันนี้สำเร็จ",
+      message: "ล้างออร์เดอร์ที่รอดำเนินการของวันนี้สำเร็จ",
       deleted_count: result.rowCount ?? 0,
     });
   } catch (error: unknown) {

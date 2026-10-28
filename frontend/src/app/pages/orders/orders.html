@@ -10,13 +10,13 @@
       <button type="button" class="btn btn-outline" [disabled]="busy || savingOrder()" (click)="simulateOrders()">
         จำลองออเดอร์
       </button>
-      <button type="button" class="btn btn-error btn-outline" [disabled]="busy || pendingSimulatedCount() === 0"
+      <button type="button" class="btn btn-error btn-outline" [disabled]="busy || pendingClearableCount() === 0"
         (click)="clearOrders()">
         @if (clearingOrders()) {
         <span class="loading loading-spinner loading-xs"></span>
         กำลังล้าง...
         } @else {
-          ล้างออร์เดอร์จำลองวันนี้ ({{ pendingSimulatedCount() }})
+          ล้างออร์เดอร์วันนี้ ({{ pendingClearableCount() }})
         }
       </button>
 
@@ -148,7 +148,6 @@
           <tr class="hover">
             <td class="font-mono text-base-content/70">
               {{ order.order_id }}
-              @if (order.is_simulated) { <span class="badge badge-secondary badge-xs ml-1">จำลอง</span> }
             </td>
 
             <td>

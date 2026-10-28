@@ -53,8 +53,8 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
   protected readonly pendingCount = computed(
     () => this.orders().filter((order) => order.status === 'PENDING').length,
   );
-  protected readonly pendingSimulatedCount = computed(
-    () => this.orders().filter((order) => order.is_simulated && order.status === 'PENDING').length,
+  protected readonly pendingClearableCount = computed(
+    () => this.orders().filter((order) => order.status === 'PENDING').length,
   );
 
   protected readonly loading = signal(true);
@@ -498,7 +498,7 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
 
   protected async clearOrders(): Promise<void> {
     const confirmed = window.confirm(
-      `ยืนยันล้างออร์เดอร์จำลองที่รอดำเนินการวันนี้ ${this.pendingSimulatedCount()} รายการใช่ไหม?\nออร์เดอร์ปกติและออร์เดอร์ที่อยู่ในใบงานจะไม่ถูกลบ`,
+      `ยืนยันล้างออร์เดอร์ที่รอดำเนินการของวันนี้ ${this.pendingClearableCount()} รายการใช่ไหม?\nออร์เดอร์ที่อยู่ในใบงานหรือจัดส่งแล้วจะไม่ถูกลบ`,
     );
 
     if (!confirmed) {
