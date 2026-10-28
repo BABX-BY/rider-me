@@ -47,17 +47,17 @@ function constraints(plan: RoutePlanResult, input: readonly RoutingOrder[], ride
 // Independent exhaustive oracle: assign every order to a rider or leave it out;
 // enumerate every stop permutation; do not call production cost/timing helpers.
 function oracle(input: RoutingOrder[], riders: RoutingRider[], matrix: RoadDistanceMatrix, departure = 690) {
-  let best = { count: -1, late: Infinity, profit: -Infinity };
+  let best = { count: -1, late: Infinity, outboundCost: Infinity, outboundDistance: Infinity, outboundMinutes: Infinity };
   const active = riders.filter((item) => item.status === 'AVAILABLE');
   const allocations = active.map(() => [] as number[]);
   const permutations = (items: number[]): number[][] => items.length ? items.flatMap((item) =>
     permutations(items.filter((other) => other !== item)).map((rest) => [item, ...rest])) : [[]];
   const evaluate = () => {
-    let count = 0, late = 0, profit = 0;
+    let count = 0, late = 0, outboundCost = 0, outboundDistance = 0, outboundMinutes = 0;
     for (const members of allocations) {
       if (!members.length) continue;
       const boxes = members.reduce((sum, index) => sum + input[index].boxQuantity, 0);
-      let bestTrip = { late: Infinity, profit: -Infinity };
+      let bestTrip = { late: Infinity, outboundCost: Infinity, outboundDistance: Infinity, outboundMinutes: Infinity };
       for (const sequence of permutations(members)) {
         let prior = 0, distance = 0, tripLate = 0;
         for (const index of sequence) {
@@ -65,14 +65,30 @@ function oracle(input: RoutingOrder[], riders: RoutingRider[], matrix: RoadDista
           if (departure + distance * 2 > 750) tripLate += 1;
           prior = index + 1;
         }
+        const tripOutboundDistance = distance;
+        const tripOutboundCost = Number((boxes * 40 + 15 + tripOutboundDistance * boxes * 2 + tripLate * 20).toFixed(2));
         distance += matrix.distancesKm[prior][0];
-        const cost = Number((boxes * 40 + 15 + distance * boxes * 2 + tripLate * 20).toFixed(2));
-        const tripProfit = Math.round((boxes * 65 - cost) * 100);
-        if (tripLate < bestTrip.late || (tripLate === bestTrip.late && tripProfit > bestTrip.profit)) bestTrip = { late: tripLate, profit: tripProfit };
+        const tripOutboundMinutes = tripOutboundDistance * 2;
+        const winsTripTieBreak = tripOutboundCost < bestTrip.outboundCost - 1e-9 ||
+          (Math.abs(tripOutboundCost - bestTrip.outboundCost) < 1e-9 &&
+            (tripOutboundDistance < bestTrip.outboundDistance - 1e-9 ||
+              (Math.abs(tripOutboundDistance - bestTrip.outboundDistance) < 1e-9 &&
+                tripOutboundMinutes < bestTrip.outboundMinutes)));
+        if (tripLate < bestTrip.late || (tripLate === bestTrip.late && winsTripTieBreak)) {
+          bestTrip = { late: tripLate, outboundCost: tripOutboundCost, outboundDistance: tripOutboundDistance, outboundMinutes: tripOutboundMinutes };
+        }
       }
-      count += members.length; late += bestTrip.late; profit += bestTrip.profit;
+      count += members.length; late += bestTrip.late; outboundCost += bestTrip.outboundCost;
+      outboundDistance += bestTrip.outboundDistance; outboundMinutes = Math.max(outboundMinutes, bestTrip.outboundMinutes);
     }
-    if (count > best.count || (count === best.count && (late < best.late || (late === best.late && profit > best.profit)))) best = { count, late, profit };
+    const winsAllocationTieBreak = outboundCost < best.outboundCost - 1e-9 ||
+      (Math.abs(outboundCost - best.outboundCost) < 1e-9 &&
+        (outboundDistance < best.outboundDistance - 1e-9 ||
+          (Math.abs(outboundDistance - best.outboundDistance) < 1e-9 && outboundMinutes < best.outboundMinutes)));
+    if (count > best.count || (count === best.count && late < best.late) ||
+      (count === best.count && late === best.late && winsAllocationTieBreak)) {
+      best = { count, late, outboundCost, outboundDistance, outboundMinutes };
+    }
   };
   const assign = (index: number) => {
     if (index === input.length) { evaluate(); return; }
@@ -115,6 +131,22 @@ describe('optimizeDeliveryRoutes', () => {
     expect(result.summary.profit).toBe(36);
   });
 
+  it('chooses the cheapest outbound order sequence even when its return leg is longer', () => {
+    const input = [
+      { orderId: 1, customerId: 1, boxQuantity: 1, latitude: 0.01, longitude: 0 },
+      { orderId: 2, customerId: 2, boxQuantity: 1, latitude: 0.02, longitude: 0 },
+    ];
+    const matrix = { points: [store, ...input], distancesKm: [
+      [0, 1, 10],
+      [1, 0, 1],
+      [100, 10, 0],
+    ] };
+    const trip = optimizeDeliveryRoutes(store, input, [rider(1)], matrix)[0].result.trips[0];
+    expect(trip.route.stops.map((stop) => stop.orderId)).toEqual([1, 2]);
+    expect(trip.route.returnDistanceKm).toBe(100);
+    expect(trip.route.totalDistanceKm).toBe(102);
+  });
+
   it('groups customers by the road connection across a barrier rather than coordinate proximity', () => {
     const input = orders(4).map((order) => ({ ...order, boxQuantity: 1 }));
     const matrix = { points: [store, ...input], distancesKm: [
@@ -128,7 +160,7 @@ describe('optimizeDeliveryRoutes', () => {
     expect(result.summary.totalCost).toBe(223.6);
   });
 
-  it.each([0, 1, 2, 3, 4, 5])('matches exhaustive optimal coverage, late count and profit, directed fixture %i', (seed) => {
+  it.each([0, 1, 2, 3, 4, 5])('matches exhaustive coverage, punctuality and outbound cost, directed fixture %i', (seed) => {
     const input = orders(5);
     const riders = [rider(1, seed % 2 ? 2 : 3), rider(2, 3)];
     const matrix = matrixFor(input, seed);
@@ -137,18 +169,26 @@ describe('optimizeDeliveryRoutes', () => {
     const result = optimizeDeliveryRoutes(store, input, riders, matrix, { departureMinute })[0].result;
     expect(result.summary.assignedOrderCount).toBe(expected.count);
     expect(result.summary.lateOrderCount).toBe(expected.late);
-    expect(Math.round(result.summary.profit * 100)).toBe(expected.profit);
+    const actualOutboundCost = result.trips.reduce((sum, trip) => sum + Number((trip.totalBoxes * 40 + 15 +
+      (trip.route.stops.at(-1)?.cumulativeDistanceKm ?? 0) * trip.totalBoxes * 2 + trip.timing.lateOrderCount * 20).toFixed(2)), 0);
+    expect(actualOutboundCost).toBeCloseTo(expected.outboundCost, 2);
+    expect(result.trips.reduce((sum, trip) => sum + (trip.route.stops.at(-1)?.cumulativeDistanceKm ?? 0), 0))
+      .toBeCloseTo(expected.outboundDistance, 8);
     constraints(result, input, riders);
   });
 
-  it('handles partial coverage by choosing profit after coverage and punctuality', () => {
+  it('handles partial coverage and chooses an outbound-only objective', () => {
     const input = orders(5);
     const riders = [rider(1, 1), rider(2, 2), rider(3, 3, 'BUSY')];
     const matrix = matrixFor(input, 3);
     const expected = oracle(input, riders, matrix);
     const result = optimizeDeliveryRoutes(store, input, riders, matrix)[0].result;
     expect(result.summary.assignedOrderCount).toBe(3);
-    expect(Math.round(result.summary.profit * 100)).toBe(expected.profit);
+    const actualOutboundCost = result.trips.reduce((sum, trip) => sum + Number((trip.totalBoxes * 40 + 15 +
+      (trip.route.stops.at(-1)?.cumulativeDistanceKm ?? 0) * trip.totalBoxes * 2 + trip.timing.lateOrderCount * 20).toFixed(2)), 0);
+    expect(actualOutboundCost).toBeCloseTo(expected.outboundCost, 2);
+    expect(result.trips.reduce((sum, trip) => sum + (trip.route.stops.at(-1)?.cumulativeDistanceKm ?? 0), 0))
+      .toBeCloseTo(expected.outboundDistance, 8);
     constraints(result, input, riders);
   });
 
@@ -162,18 +202,19 @@ describe('optimizeDeliveryRoutes', () => {
     expect(new Set(result.map((plan) => plan.id)).size).toBe(result.length);
     expect(result[0].result.summary.assignedOrderCount).toBe(count);
     for (const plan of result) constraints(plan.result, input, riders);
-    // Initial heuristic regroupings remain candidates, so road optimisation
-    // cannot return a worse monetary result than their best road reevaluation.
+    // Initial heuristic regroupings remain candidates, so outbound optimisation
+    // cannot return a longer delivery path than their best road reevaluation.
     const original = buildRoutePlanAlternatives(store, input, riders, { includeReturnDistance: true, singleTripPerRider: true });
-    const originalCosts = original.map((plan) => plan.result.trips.reduce((sum, trip) => {
+    const originalOutboundCosts = original.map((plan) => plan.result.trips.reduce((sum, trip) => {
       let previous = 0, distance = 0;
       for (const stop of trip.route.stops) {
         distance += matrix.distancesKm[previous][stop.orderId]; previous = stop.orderId;
       }
-      distance += matrix.distancesKm[previous][0];
-      return sum + Number((trip.totalBoxes * 40 + 15 + distance * trip.totalBoxes * 2).toFixed(2));
+      return sum + Number((trip.totalBoxes * 40 + 15 + distance * trip.totalBoxes * 2 + trip.timing.lateOrderCount * 20).toFixed(2));
     }, 0));
-    expect(result[0].result.summary.totalCost).toBeLessThanOrEqual(Math.min(...originalCosts) + 1e-9);
+    const optimizedOutboundCost = result[0].result.trips.reduce((sum, trip) => sum + Number((trip.totalBoxes * 40 + 15 +
+      (trip.route.stops.at(-1)?.cumulativeDistanceKm ?? 0) * trip.totalBoxes * 2 + trip.timing.lateOrderCount * 20).toFixed(2)), 0);
+    expect(optimizedOutboundCost).toBeLessThanOrEqual(Math.min(...originalOutboundCosts) + 1e-9);
   });
 
   it('is deterministic and does not mutate order, rider or matrix inputs', () => {
