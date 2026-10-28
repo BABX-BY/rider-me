@@ -34,7 +34,11 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
   private radiusCircle?: L.Circle;
 
   protected readonly maxOrders = MAX_ORDERS;
-  protected readonly boxOptions = [1, 2, 3];
+  protected get boxOptions(): number[] {
+    const existingOrder = this.addingOrder() ? this.selectedCustomerOrder : undefined;
+    if (existingOrder?.status !== 'PENDING') return [1, 2, 3];
+    return [1, 2, 3].filter((quantity) => quantity + existingOrder.box_quantity <= 3);
+  }
 
   protected readonly orders = signal<Order[]>([]);
   protected readonly customers = signal<Customer[]>([]);
@@ -139,6 +143,21 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
     return this.customers().find((c) => c.customer_id === this.form.customer_id);
   }
 
+  protected get selectedCustomerOrder(): Order | undefined {
+    return this.orders().find((order) => order.customer_id === this.form.customer_id);
+  }
+
+  protected get canCreateSelectedCustomerOrder(): boolean {
+    return this.selectedCustomerOrder?.status === undefined || this.selectedCustomerOrder.status === 'PENDING';
+  }
+
+  protected onOrderCustomerChange(): void {
+    const firstAllowedQuantity = this.boxOptions[0];
+    if (firstAllowedQuantity !== undefined && !this.boxOptions.includes(this.form.box_quantity)) {
+      this.form.box_quantity = firstAllowedQuantity;
+    }
+  }
+
   private toMessage(error: unknown, fallback: string): string {
     if (error instanceof HttpErrorResponse) {
       if (error.status === 0) {
@@ -213,26 +232,30 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
       this.notification.set({ type: 'error', message: `วันนี้มีออเดอร์ ${currentCount} รายการแล้ว (ช่วงเป้าหมาย 20–30) จึงไม่เพิ่มข้อมูลซ้ำ` });
       return;
     }
-    if (this.customers().length === 0) {
-      this.notification.set({ type: 'error', message: 'ยังไม่มีข้อมูลลูกค้าสำหรับเพิ่มออเดอร์' });
-      return;
-    }
-
-    const targetCount = 20 + Math.floor(Math.random() * 11);
-    const amount = Math.min(targetCount - currentCount, MAX_ORDERS - currentCount);
     this.savingOrder.set(true);
     this.notification.set(null);
     try {
-      const items = Array.from({ length: amount }, () => {
-        const customer = this.customers()[Math.floor(Math.random() * this.customers().length)];
-        return {
-          customer_id: customer.customer_id,
-          box_quantity: 1 + Math.floor(Math.random() * 3),
-        };
-      });
+      const candidates = await this.orderApi.getSimulationCustomers();
+      const minimumNeeded = Math.max(0, 20 - currentCount);
+      if (candidates.length < minimumNeeded) {
+        this.notification.set({ type: 'error', message: `ลูกค้าในระยะ 3 กม. ที่ยังไม่มีออเดอร์มี ${candidates.length} ราย ต้องมีอย่างน้อย ${minimumNeeded} รายเพื่อจำลองให้ครบ 20 รายการ` });
+        return;
+      }
+
+      const targetCount = 20 + Math.floor(Math.random() * 11);
+      const amount = Math.min(targetCount - currentCount, MAX_ORDERS - currentCount, candidates.length);
+      const shuffledCandidates = [...candidates];
+      for (let index = shuffledCandidates.length - 1; index > 0; index--) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
+        [shuffledCandidates[index], shuffledCandidates[swapIndex]] = [shuffledCandidates[swapIndex], shuffledCandidates[index]];
+      }
+      const items = shuffledCandidates.slice(0, amount).map((customer) => ({
+        customer_id: customer.customer_id,
+        box_quantity: 1 + Math.floor(Math.random() * 3),
+      }));
       const createdOrders = await this.orderApi.simulateOrders(items);
       this.orders.update((list) => [...list, ...createdOrders]);
-      this.notification.set({ type: 'success', message: `เพิ่มออเดอร์แล้ว ${amount} รายการ รวม ${this.orders().length} รายการ` });
+      this.notification.set({ type: 'success', message: `เพิ่มออเดอร์แล้ว ${createdOrders.length} รายการ รวม ${this.orders().length} รายการ` });
     } catch (error) {
       this.notification.set({ type: 'error', message: this.toMessage(error, 'เพิ่มออเดอร์ไม่สำเร็จ กรุณาตรวจสอบรายการปัจจุบัน') });
       await this.loadOrders();
@@ -330,6 +353,10 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
       this.notification.set({ type: 'error', message: 'กรุณาเลือกลูกค้า' });
       return;
     }
+    if (!this.canCreateSelectedCustomerOrder || !this.boxOptions.includes(this.form.box_quantity)) {
+      this.notification.set({ type: 'error', message: 'ลูกค้ารายนี้ไม่สามารถเพิ่มออร์เดอร์ได้ หรือจำนวนรวมจะเกิน 3 กล่อง' });
+      return;
+    }
 
     this.notification.set(null);
     this.savingOrder.set(true);
@@ -337,13 +364,16 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
     try {
       const newOrder = await this.orderApi.createOrder(customerId, this.form.box_quantity);
 
-      this.orders.update((list) => [...list, newOrder]);
+      const alreadyListed = this.orders().some((order) => order.order_id === newOrder.order_id);
+      this.orders.update((list) => alreadyListed
+        ? list.map((order) => order.order_id === newOrder.order_id ? newOrder : order)
+        : [...list, newOrder]);
       this.savingOrder.set(false);
       this.cancelEditing();
 
       this.notification.set({
         type: 'success',
-        message: `เพิ่มออเดอร์ #${newOrder.order_id} ของ ${newOrder.customer_first_name} ${newOrder.customer_last_name} แล้ว`,
+        message: `บันทึกออเดอร์ #${newOrder.order_id} แล้ว รวม ${newOrder.box_quantity} กล่อง`,
       });
     } catch (error) {
       console.error('ไม่สามารถเพิ่มรายการสั่งซื้อได้:', error);
