@@ -1,4 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { DecimalPipe } from '@angular/common';
 import {
   AfterViewInit,
   Component,
@@ -13,11 +14,14 @@ import * as L from 'leaflet';
 import { MAPTILER_API_KEY } from '../../config/map';
 import { Customer } from '../../model/customer.model';
 import { CustomerApi } from '../../services/api/customer-api';
+import { RouteApi } from '../../services/api/route-api';
 import { FormsModule } from '@angular/forms';
+
+const SERVICE_RADIUS_KM = 3;
 
 @Component({
   selector: 'app-customers',
-  imports: [FormsModule],
+  imports: [FormsModule, DecimalPipe],
   templateUrl: './customers.html',
   styleUrl: './customers.css',
 })
@@ -25,6 +29,7 @@ export class Customers implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('mapElement') private mapElement!: ElementRef<HTMLDivElement>;
 
   private readonly customerApi = inject(CustomerApi);
+  private readonly routeApi = inject(RouteApi);
   private map?: L.Map;
   private customerMarkerLayer?: L.LayerGroup;
   private draftLocationMarker?: L.CircleMarker;
@@ -45,6 +50,7 @@ export class Customers implements OnInit, AfterViewInit, OnDestroy {
   protected readonly editingCustomer = signal<Customer | null>(null);
   protected readonly addingCustomer = signal(false);
   protected readonly pickingLocation = signal(false);
+  protected readonly storeLocation = signal<{ lat: number; lng: number } | null>(null);
 
   protected editForm = {
     first_name: '',
@@ -55,12 +61,54 @@ export class Customers implements OnInit, AfterViewInit, OnDestroy {
     longitude: '',
   };
 
+  protected getDistanceFromStore(lat: number, lng: number): number {
+    const store = this.storeLocation();
+    if (!store) return Infinity;
+    const R = 6371;
+    const dLat = ((lat - store.lat) * Math.PI) / 180;
+    const dLon = ((lng - store.lng) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos((store.lat * Math.PI) / 180) *
+        Math.cos((lat * Math.PI) / 180) *
+        Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  protected get locationServiceStatus(): { inService: boolean; distanceKm: number } | null {
+    const lat = Number(this.editForm.latitude);
+    const lng = Number(this.editForm.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    const dist = this.getDistanceFromStore(lat, lng);
+    return { inService: dist <= SERVICE_RADIUS_KM, distanceKm: dist };
+  }
+
   ngOnInit(): void {
     this.loadCustomers();
   }
 
   ngAfterViewInit(): void {
-    this.map = L.map(this.mapElement.nativeElement).setView([16.244335, 103.249455], 14);
+    void this.initializeMap();
+  }
+
+  private async initializeMap(): Promise<void> {
+    try {
+      const context = await this.routeApi.getPlanningStore();
+      const latitude = Number(context.store.latitude);
+      const longitude = Number(context.store.longitude);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        throw new Error('พิกัดร้านไม่ถูกต้อง');
+      }
+      this.storeLocation.set({ lat: latitude, lng: longitude });
+    } catch (error) {
+      console.error('ไม่สามารถโหลดพิกัดร้านได้:', error);
+      this.errorMessage.set('ไม่สามารถโหลดพิกัดร้านจาก Backend ได้');
+      return;
+    }
+
+    const store = this.storeLocation();
+    if (!store) return;
+    this.map = L.map(this.mapElement.nativeElement).setView([store.lat, store.lng], 14);
 
     L.tileLayer(
       `https://api.maptiler.com/maps/streets-v4/{z}/{x}/{y}.png?key=${MAPTILER_API_KEY}`,
@@ -73,6 +121,31 @@ export class Customers implements OnInit, AfterViewInit, OnDestroy {
         crossOrigin: true,
       },
     ).addTo(this.map);
+
+    // แสดงพื้นที่บริการจัดส่ง (รัศมี 3 กม.)
+    L.circle([store.lat, store.lng], {
+      radius: SERVICE_RADIUS_KM * 1000,
+      color: '#2563eb',
+      fillColor: '#3b82f6',
+      fillOpacity: 0.08,
+      weight: 2,
+      dashArray: '6 6',
+    }).bindTooltip('พื้นที่บริการจัดส่ง (รัศมี 3 กม.)').addTo(this.map);
+
+    // ปักหมุดร้านค้า
+    const storeIcon = L.divIcon({
+      className: 'store-pin',
+      html: `
+        <div style="background-color: #0f766e; color: white; border-radius: 50%; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3); font-size: 18px;">
+          🏪
+        </div>
+      `,
+      iconSize: [34, 34],
+      iconAnchor: [17, 17],
+    });
+    L.marker([store.lat, store.lng], { icon: storeIcon })
+      .bindPopup('<strong>ร้านข้าวกล่องเดลิเวอรี ขามเรียง (จุดศูนย์กลาง)</strong><p style="margin:0; font-size:12px; color:#64748b;">รัศมีบริการ 3 กม.</p>')
+      .addTo(this.map);
 
     this.customerMarkerLayer = L.layerGroup().addTo(this.map);
 
@@ -103,9 +176,14 @@ export class Customers implements OnInit, AfterViewInit, OnDestroy {
       }).addTo(map);
 
       this.pickingLocation.set(false);
+
+      const dist = this.getDistanceFromStore(event.latlng.lat, event.latlng.lng);
+      const inService = dist <= SERVICE_RADIUS_KM;
       this.notification.set({
-        type: 'success',
-        message: 'เลือกตำแหน่งใหม่แล้ว กดบันทึกเพื่อยืนยัน',
+        type: inService ? 'success' : 'error',
+        message: inService
+          ? `เลือกตำแหน่งแล้ว: อยู่ในพื้นที่บริการ (ห่างจากร้าน ${dist.toFixed(2)} กม.)`
+          : `เลือกตำแหน่งแล้ว: อยู่นอกพื้นที่บริการจัดส่ง (ห่างจากร้าน ${dist.toFixed(2)} กม. เกินรัศมี 3 กม.)`,
       });
     });
 
@@ -159,6 +237,9 @@ export class Customers implements OnInit, AfterViewInit, OnDestroy {
         continue;
       }
 
+      const dist = this.getDistanceFromStore(latitude, longitude);
+      const inService = dist <= SERVICE_RADIUS_KM;
+
       const popup = document.createElement('div');
 
       const name = document.createElement('strong');
@@ -170,7 +251,13 @@ export class Customers implements OnInit, AfterViewInit, OnDestroy {
       const address = document.createElement('p');
       address.textContent = `ที่อยู่: ${customer.address}`;
 
-      popup.append(name, phone, address);
+      const distanceP = document.createElement('p');
+      distanceP.style.fontSize = '12px';
+      distanceP.style.marginTop = '4px';
+      distanceP.style.color = inService ? '#16a34a' : '#d97706';
+      distanceP.textContent = `ห่างจากร้าน ${dist.toFixed(2)} กม. (${inService ? 'ในพื้นที่บริการ' : 'นอกพื้นที่บริการ'})`;
+
+      popup.append(name, phone, address, distanceP);
 
       const marker = L.marker([latitude, longitude], { icon: customerIcon })
         .bindPopup(popup)
@@ -345,6 +432,11 @@ export class Customers implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
+    if (this.getDistanceFromStore(latitude, longitude) > SERVICE_RADIUS_KM) {
+      this.notification.set({ type: 'error', message: 'พิกัดลูกค้าอยู่นอกพื้นที่บริการรัศมี 3 กม.' });
+      return;
+    }
+
     this.notification.set(null);
     this.savingCustomer.set(true);
 
@@ -423,6 +515,11 @@ export class Customers implements OnInit, AfterViewInit, OnDestroy {
         type: 'error',
         message: 'กรุณากรอกข้อมูลให้ครบ และเลือกตำแหน่งลูกค้าบนแผนที่',
       });
+      return;
+    }
+
+    if (this.getDistanceFromStore(latitude, longitude) > SERVICE_RADIUS_KM) {
+      this.notification.set({ type: 'error', message: 'พิกัดลูกค้าอยู่นอกพื้นที่บริการรัศมี 3 กม.' });
       return;
     }
 

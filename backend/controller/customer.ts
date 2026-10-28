@@ -2,6 +2,34 @@ import express from "express";
 import { pool } from "../database/pool.js";
 
 export const customerRouter = express.Router();
+const SERVICE_RADIUS_KM = 3;
+const EARTH_RADIUS_KM = 6371;
+
+function distanceKm(latitudeA: number, longitudeA: number, latitudeB: number, longitudeB: number): number {
+  const dLat = ((latitudeB - latitudeA) * Math.PI) / 180;
+  const dLon = ((longitudeB - longitudeA) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos((latitudeA * Math.PI) / 180) * Math.cos((latitudeB * Math.PI) / 180) *
+    Math.sin(dLon / 2) ** 2;
+  return EARTH_RADIUS_KM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function getActiveStoreLocation(): Promise<{ latitude: number; longitude: number } | null> {
+  const result = await pool.query(
+    `SELECT latitude, longitude FROM stores WHERE is_active = TRUE ORDER BY store_id LIMIT 1`,
+  );
+  const store = result.rows[0];
+  if (!store) return null;
+  return { latitude: Number(store.latitude), longitude: Number(store.longitude) };
+}
+
+function outsideServiceArea(
+  store: { latitude: number; longitude: number } | null,
+  latitude: number,
+  longitude: number,
+): boolean {
+  return !store || distanceKm(store.latitude, store.longitude, latitude, longitude) > SERVICE_RADIUS_KM;
+}
 
 customerRouter.get("/", async (req, res) => {
   const search =
@@ -85,6 +113,12 @@ customerRouter.post("/", async (req, res) => {
   }
 
   try {
+    const store = await getActiveStoreLocation();
+    if (outsideServiceArea(store, lat, lon)) {
+      res.status(400).json({ message: "พิกัดลูกค้าอยู่นอกพื้นที่บริการรัศมี 3 กม." });
+      return;
+    }
+
     const result = await pool.query(
       `
       INSERT INTO customers
@@ -237,6 +271,27 @@ customerRouter.patch("/:id", async (req, res) => {
   }
 
   try {
+    if (setClauses.some((clause) => clause.startsWith("latitude =") || clause.startsWith("longitude ="))) {
+      const current = await pool.query(
+        `SELECT latitude, longitude FROM customers WHERE customer_id = $1`,
+        [id],
+      );
+      if (current.rowCount === 0) {
+        res.status(404).json({ message: "ไม่พบข้อมูลลูกค้า" });
+        return;
+      }
+
+      const currentLatitude = Number(current.rows[0].latitude);
+      const currentLongitude = Number(current.rows[0].longitude);
+      const nextLatitude = body.latitude === undefined ? currentLatitude : Number(body.latitude);
+      const nextLongitude = body.longitude === undefined ? currentLongitude : Number(body.longitude);
+      const store = await getActiveStoreLocation();
+      if (outsideServiceArea(store, nextLatitude, nextLongitude)) {
+        res.status(400).json({ message: "พิกัดลูกค้าอยู่นอกพื้นที่บริการรัศมี 3 กม." });
+        return;
+      }
+    }
+
     values.push(id);
 
     const result = await pool.query(

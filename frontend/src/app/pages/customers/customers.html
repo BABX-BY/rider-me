@@ -1,7 +1,7 @@
 <section class="space-y-4">
   <div>
     <h1 class="text-2xl font-bold">จัดการข้อมูลลูกค้า</h1>
-    <p class="text-base-content/70">ดูตำแหน่งลูกค้าและจัดการข้อมูล</p>
+    <p class="text-base-content/70">ดูตำแหน่งลูกค้าและจัดการข้อมูล (พื้นที่บริการจัดส่งรัศมี 3 กม.)</p>
   </div>
 
   <div class="grid min-h-[70vh] grid-cols-1 gap-4 lg:grid-cols-3">
@@ -17,7 +17,7 @@
       @if (notification(); as notice) {
         <div
           role="alert"
-          class="alert mb-4"
+          class="alert mb-4 text-sm"
           [class.alert-success]="notice.type === 'success'"
           [class.alert-error]="notice.type === 'error'"
         >
@@ -89,14 +89,34 @@
             เลือกตำแหน่งบนแผนที่
           </button>
 
+          @if (locationServiceStatus; as status) {
+            <div
+              class="rounded-lg p-2.5 text-xs flex items-center justify-between border"
+              [class.bg-success/10]="status.inService"
+              [class.border-success/30]="status.inService"
+              [class.text-success]="status.inService"
+              [class.bg-warning/10]="!status.inService"
+              [class.border-warning/30]="!status.inService"
+              [class.text-warning]="!status.inService"
+            >
+              <span class="font-semibold flex items-center gap-1.5">
+                <span>{{ status.inService ? '✓' : '⚠️' }}</span>
+                <span>{{ status.inService ? 'อยู่ในพื้นที่บริการ' : 'อยู่นอกพื้นที่บริการ (เกิน 3 กม.)' }}</span>
+              </span>
+              <span class="font-mono text-[11px] opacity-80">
+                ห่างจากร้าน {{ status.distanceKm | number:'1.2-2' }} กม.
+              </span>
+            </div>
+          }
+
           @if (pickingLocation()) {
             <p class="text-sm text-primary">คลิกตำแหน่งลูกค้าบนแผนที่เพื่อกำหนดพิกัด</p>
           } @else {
-            <p class="text-sm text-base-content/70">
+            <p class="text-xs text-base-content/70">
               @if (addingCustomer()) {
                 ต้องเลือกตำแหน่งลูกค้าบนแผนที่ก่อนเพิ่ม
               } @else {
-                ใช้พิกัดเดิม หรือเลือกตำแหน่งใหม่จากแผนที่
+                ใช้พิกัดเดิม หรือคลิกเลือกตำแหน่งใหม่จากแผนที่
               }
             </p>
           }
@@ -178,7 +198,14 @@
                 class="block w-full cursor-pointer text-left"
                 (click)="focusCustomer(customer)"
               >
-                <h3 class="font-semibold">{{ customer.first_name }} {{ customer.last_name }}</h3>
+                <div class="flex items-center justify-between gap-2">
+                  <h3 class="font-semibold">{{ customer.first_name }} {{ customer.last_name }}</h3>
+                  @if (getDistanceFromStore(+customer.latitude, +customer.longitude) <= 3) {
+                    <span class="badge badge-xs badge-success">ในพื้นที่</span>
+                  } @else {
+                    <span class="badge badge-xs badge-warning">นอกพื้นที่</span>
+                  }
+                </div>
 
                 <p class="mt-2 text-sm">
                   <span class="font-medium">เบอร์โทร:</span>
@@ -188,6 +215,10 @@
                 <p class="mt-1 text-sm">
                   <span class="font-medium">ที่อยู่:</span>
                   {{ customer.address }}
+                </p>
+
+                <p class="mt-1 text-xs text-base-content/65">
+                  ห่างจากร้าน {{ getDistanceFromStore(+customer.latitude, +customer.longitude) | number:'1.2-2' }} กม.
                 </p>
               </button>
 
