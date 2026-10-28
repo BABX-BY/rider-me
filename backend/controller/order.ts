@@ -47,7 +47,7 @@ orderRouter.post("/simulate", async (req, res) => {
   }));
 
   if (
-    items.length < 20 ||
+    items.length === 0 ||
     items.length > 30 ||
     items.some(
       (item) =>
@@ -65,12 +65,16 @@ orderRouter.post("/simulate", async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    await client.query(
+      `SELECT pg_advisory_xact_lock(hashtext('rider-orders:' || ${BUSINESS_DATE_SQL}::text))`,
+    );
     const countResult = await client.query(
       `SELECT COUNT(*)::int AS order_count FROM orders WHERE order_date = ${BUSINESS_DATE_SQL}`,
     );
-    if (countResult.rows[0].order_count + items.length > 30) {
+    const totalAfterSimulation = countResult.rows[0].order_count + items.length;
+    if (totalAfterSimulation < 20 || totalAfterSimulation > 30) {
       await client.query("ROLLBACK");
-      res.status(409).json({ message: "ระบบจำลองออเดอร์ได้ไม่เกิน 30 รายการ" });
+      res.status(409).json({ message: "หลังจำลองแล้ว ออเดอร์วันนี้ต้องมีรวม 20–30 รายการ" });
       return;
     }
 
@@ -98,7 +102,7 @@ orderRouter.post("/simulate", async (req, res) => {
          inserted.box_quantity,
          inserted.order_date,
          inserted.status,
-         inserted.is_simulated,
+        inserted.is_simulated,
          inserted.created_at,
          customer.customer_id,
          customer.first_name AS customer_first_name,
@@ -142,31 +146,38 @@ orderRouter.post("/", async (req, res) => {
     return;
   }
 
+  const client = await pool.connect();
   try {
-    const countResult = await pool.query(
+    await client.query("BEGIN");
+    await client.query(
+      `SELECT pg_advisory_xact_lock(hashtext('rider-orders:' || ${BUSINESS_DATE_SQL}::text))`,
+    );
+    const countResult = await client.query(
       `SELECT COUNT(*)::int AS order_count FROM orders WHERE order_date = ${BUSINESS_DATE_SQL}`,
     );
 
     if (countResult.rows[0].order_count >= 30) {
+      await client.query("ROLLBACK");
       res.status(409).json({
         message: "ระบบจำลองออเดอร์ได้ไม่เกิน 30 รายการ",
       });
       return;
     }
 
-    const customerResult = await pool.query(
+    const customerResult = await client.query(
       "SELECT customer_id FROM customers WHERE customer_id = $1",
       [customerId],
     );
 
     if (customerResult.rowCount === 0) {
+      await client.query("ROLLBACK");
       res.status(404).json({
         message: "ไม่พบข้อมูลลูกค้าที่ระบุ",
       });
       return;
     }
 
-    const insertResult = await pool.query(
+    const insertResult = await client.query(
       `
       INSERT INTO orders
         (customer_id, box_quantity, order_date)
@@ -177,7 +188,7 @@ orderRouter.post("/", async (req, res) => {
       [customerId, boxQuantity],
     );
 
-    const result = await pool.query(
+    const result = await client.query(
       `
       SELECT
         o.order_id,
@@ -201,13 +212,17 @@ orderRouter.post("/", async (req, res) => {
       [insertResult.rows[0].order_id],
     );
 
+    await client.query("COMMIT");
     res.status(201).json(result.rows[0]);
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error("ไม่สามารถเพิ่มรายการสั่งซื้อได้:", error);
 
     res.status(500).json({
       message: "ไม่สามารถเพิ่มรายการสั่งซื้อได้",
     });
+  } finally {
+    client.release();
   }
 });
 
@@ -369,20 +384,51 @@ orderRouter.delete("/:id", async (req, res) => {
 });
 
 orderRouter.delete("/", async (_req, res) => {
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
+    await client.query("BEGIN");
+    await client.query(
+      `SELECT pg_advisory_xact_lock(hashtext('rider-orders:' || ${BUSINESS_DATE_SQL}::text))`,
+    );
+    const blockedResult = await client.query(
+      `SELECT COUNT(*)::int AS blocked_count
+       FROM orders AS order_row
+       WHERE order_row.order_date = ${BUSINESS_DATE_SQL}
+         AND order_row.is_simulated = TRUE
+         AND (order_row.status <> 'PENDING' OR EXISTS (
+           SELECT 1 FROM route_stops AS route_stop WHERE route_stop.order_id = order_row.order_id
+         ))`,
+    );
+    if (blockedResult.rows[0].blocked_count > 0) {
+      await client.query("ROLLBACK");
+      res.status(409).json({
+        message: "มีออร์เดอร์จำลองที่ถูกมอบหมายหรือมีจุดส่งในใบงานแล้ว จึงล้างไม่ได้",
+      });
+      return;
+    }
+
+    const result = await client.query(
       `
       DELETE FROM orders
-      WHERE is_simulated = TRUE
+      WHERE order_date = ${BUSINESS_DATE_SQL}
+        AND status = 'PENDING'
+        AND is_simulated = TRUE
       RETURNING order_id
       `,
     );
 
+    await client.query("COMMIT");
+
     res.status(200).json({
-      message: "ล้างรายการออร์เดอร์จำลองทั้งหมดสำเร็จ",
+      message: "ล้างออร์เดอร์จำลองที่รอดำเนินการของวันนี้สำเร็จ",
       deleted_count: result.rowCount ?? 0,
     });
   } catch (error: unknown) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      // Connection may already be closed after a database failure.
+    }
     console.error("ไม่สามารถล้างรายการสั่งซื้อได้:", error);
 
     const databaseError = error as { code?: string };
@@ -397,13 +443,18 @@ orderRouter.delete("/", async (_req, res) => {
     res.status(500).json({
       message: "ไม่สามารถล้างรายการสั่งซื้อได้",
     });
+  } finally {
+    client.release();
   }
 });
 
 orderRouter.get("/nearby", async (req, res) => {
   const latitude = Number(req.query.latitude);
   const longitude = Number(req.query.longitude);
-  const radiusKm = 3;
+  const rawRadiusKm = req.query.radius_km;
+  const radiusKm = rawRadiusKm === undefined
+    ? 3
+    : typeof rawRadiusKm === "string" ? Number(rawRadiusKm) : Number.NaN;
 
   if (
     !Number.isFinite(latitude) ||
@@ -411,10 +462,13 @@ orderRouter.get("/nearby", async (req, res) => {
     latitude > 90 ||
     !Number.isFinite(longitude) ||
     longitude < -180 ||
-    longitude > 180
+    longitude > 180 ||
+    !Number.isFinite(radiusKm) ||
+    radiusKm < 1 ||
+    radiusKm > 3
   ) {
     res.status(400).json({
-      message: "latitude หรือ longitude ไม่ถูกต้อง",
+      message: "latitude, longitude หรือ radius_km ไม่ถูกต้อง (รัศมี 1–3 กม.)",
     });
     return;
   }
@@ -428,7 +482,6 @@ orderRouter.get("/nearby", async (req, res) => {
           o.box_quantity,
           o.order_date,
           o.status,
-          o.is_simulated,
           o.created_at,
           c.customer_id,
           c.first_name AS customer_first_name,
@@ -437,6 +490,7 @@ orderRouter.get("/nearby", async (req, res) => {
           c.address AS customer_address,
           c.latitude AS customer_latitude,
           c.longitude AS customer_longitude,
+          o.is_simulated,
           6371 * 2 * ASIN(
             SQRT(
               POWER(SIN(RADIANS(c.latitude - $1) / 2), 2) +
@@ -463,6 +517,7 @@ orderRouter.get("/nearby", async (req, res) => {
         customer_address,
         customer_latitude,
         customer_longitude,
+        is_simulated,
         distance_km
       FROM nearby_orders
       WHERE distance_km <= $3

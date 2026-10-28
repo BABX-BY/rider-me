@@ -54,9 +54,12 @@ export class OrderApi {
     return await lastValueFrom(this.http.delete<ClearOrdersResponse>(url));
   }
 
-  async getNearbyOrders(latitude: number, longitude: number): Promise<Order[]> {
+  async getNearbyOrders(latitude: number, longitude: number, radiusKm = 3): Promise<Order[]> {
     const url = `${this.api.API_ENDPOINT}/orders/nearby`;
-    const params = new HttpParams().set('latitude', latitude).set('longitude', longitude);
+    const params = new HttpParams()
+      .set('latitude', latitude)
+      .set('longitude', longitude)
+      .set('radius_km', radiusKm);
     return await lastValueFrom(this.http.get<Order[]>(url, { params }));
   }
 }
