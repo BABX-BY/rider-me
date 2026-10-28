@@ -20,7 +20,7 @@
         }
       </button>
 
-      <button type="button" class="btn btn-primary" [disabled]="busy || isFull()" (click)="startAddingOrder()">
+      <button type="button" class="btn btn-primary" [disabled]="busy" (click)="startAddingOrder()">
         + เพิ่มออเดอร์
       </button>
     </div>
@@ -220,7 +220,7 @@
       <label class="form-control w-full">
         <span class="label-text mb-1">ลูกค้า</span>
         <select class="select select-bordered w-full" name="customer_id" [(ngModel)]="form.customer_id"
-          [disabled]="!!editingOrder()" required>
+          (ngModelChange)="onOrderCustomerChange()" [disabled]="!!editingOrder()" required>
           <option [ngValue]="null" disabled>เลือกลูกค้า</option>
           @for (customer of customers(); track customer.customer_id) {
           <option [ngValue]="customer.customer_id">
@@ -233,6 +233,22 @@
       @if (selectedCustomer; as customer) {
       <div class="rounded-box bg-base-200 p-3 text-sm">
         <p><span class="font-medium">ที่อยู่:</span> {{ customer.address }}</p>
+        @if (addingOrder() && !selectedCustomerOrder && isFull()) {
+        <p class="mt-1 text-error">วันนี้มีครบ 30 ออร์เดอร์แล้ว เพิ่มลูกค้ารายใหม่ไม่ได้</p>
+        }
+        @if (addingOrder() && selectedCustomerOrder) {
+          @if (selectedCustomerOrders.length > 1) {
+          <p class="mt-1 text-error">ลูกค้านี้มีหลายออร์เดอร์วันนี้ ต้องตรวจสอบรายการเดิมก่อนเพิ่ม</p>
+          } @else if (canCreateSelectedCustomerOrder) {
+            @if (selectedCustomerBoxQuantity >= 3) {
+            <p class="mt-1 text-error">ลูกค้านี้มีครบ 3 กล่องแล้ว จึงเพิ่มออร์เดอร์วันนี้ไม่ได้</p>
+            } @else {
+            <p class="mt-1">ลูกค้านี้มี {{ selectedCustomerBoxQuantity }} กล่องแล้ว จำนวนที่เลือกจะบวกเข้ารายการเดิม โดยยอดรวมไม่เกิน 3 กล่อง</p>
+            }
+          } @else {
+          <p class="mt-1 text-error">ออร์เดอร์วันนี้ถูกมอบหมายหรือเริ่มจัดส่งแล้ว จึงเพิ่มรายการซ้ำไม่ได้</p>
+          }
+        }
       </div>
       }
 
@@ -246,7 +262,13 @@
           </button>
           }
         </div>
-        <p class="mt-1 text-xs text-base-content/60">สั่งได้ครั้งละ 1–3 กล่อง</p>
+        @if (addingOrder()) {
+          @if (!selectedCustomerOrder) {
+        <p class="mt-1 text-xs text-base-content/60">จำนวนกล่องของออร์เดอร์ใหม่ (1–3 กล่อง)</p>
+          }
+        } @else {
+        <p class="mt-1 text-xs text-base-content/60">กำหนดจำนวนกล่องใหม่ของออร์เดอร์นี้ (1–3 กล่อง)</p>
+        }
       </div>
 
       <div class="modal-action">
@@ -254,7 +276,7 @@
           ยกเลิก
         </button>
 
-        <button class="btn btn-primary" type="submit" [disabled]="savingOrder()">
+        <button class="btn btn-primary" type="submit" [disabled]="savingOrder() || (addingOrder() && (!canCreateSelectedCustomerOrder || boxOptions.length === 0))">
           @if (savingOrder()) {
           <span class="loading loading-spinner loading-xs"></span>
           กำลังบันทึก...
