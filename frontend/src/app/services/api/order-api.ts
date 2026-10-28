@@ -2,7 +2,6 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { lastValueFrom } from 'rxjs';
 import { Api } from '../../config/api';
-import { Customer } from '../../model/customer.model';
 import { Order } from '../../model/order.model';
 
 interface DeleteOrderResponse {
@@ -38,11 +37,6 @@ export class OrderApi {
   async simulateOrders(items: Array<{ customer_id: number; box_quantity: number }>): Promise<Order[]> {
     const url = `${this.api.API_ENDPOINT}/orders/simulate`;
     return await lastValueFrom(this.http.post<Order[]>(url, { items }));
-  }
-
-  async getSimulationCustomers(): Promise<Customer[]> {
-    const url = `${this.api.API_ENDPOINT}/orders/simulation-customers`;
-    return await lastValueFrom(this.http.get<Customer[]>(url));
   }
 
   async updateOrder(orderId: number, boxQuantity: number): Promise<Order> {
