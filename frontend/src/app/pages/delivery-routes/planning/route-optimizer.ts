@@ -20,22 +20,36 @@ interface OptimizerOptions {
 interface Score {
   count: number;
   late: number;
-  profit: number;
-  minutes: number;
-  distance: number;
+  outboundCost: number;
+  outboundDistance: number;
+  outboundMinutes: number;
 }
 
-// Priority is delivery coverage, punctuality, then actual monetary profit.
-// Maximising profit also minimises cost whenever the same orders are assigned.
+const outboundDistanceKm = (trip: PlannedTrip) =>
+  trip.route.stops.at(-1)?.cumulativeDistanceKm ?? 0;
+const outboundCost = (trip: PlannedTrip) => calculateTripCost(trip, false).totalCost;
+
+// Route choice prioritizes completed deliveries, punctuality, then outbound
+// operating cost. Worksheet accounting still includes the return leg.
 function compare(a: Score, b: Score): number {
-  return b.count - a.count || a.late - b.late || b.profit - a.profit ||
-    Math.ceil(a.minutes) - Math.ceil(b.minutes) ||
-    (Math.abs(a.distance - b.distance) < 1e-9 ? 0 : a.distance - b.distance);
+  return b.count - a.count || a.late - b.late ||
+    (Math.abs(a.outboundCost - b.outboundCost) < 1e-9 ? 0 : a.outboundCost - b.outboundCost) ||
+    (Math.abs(a.outboundDistance - b.outboundDistance) < 1e-9 ? 0 : a.outboundDistance - b.outboundDistance) ||
+    Math.ceil(a.outboundMinutes) - Math.ceil(b.outboundMinutes);
 }
 
-/** Uses directed road distances, including each rider's return to the shop.
- * Up to ten orders: subset dynamic programming gives the optimal primary
- * objectives (coverage, late orders, profit). Larger rounds: deterministic
+function compareTrips(a: PlannedTrip, b: PlannedTrip): number {
+  return a.timing.lateOrderCount - b.timing.lateOrderCount ||
+    (Math.abs(outboundCost(a) - outboundCost(b)) < 1e-9 ? 0 : outboundCost(a) - outboundCost(b)) ||
+    (Math.abs(outboundDistanceKm(a) - outboundDistanceKm(b)) < 1e-9 ?
+      0 : outboundDistanceKm(a) - outboundDistanceKm(b)) ||
+    Math.ceil((a.timing.lastDeliveryMinute ?? a.departureMinute) - a.departureMinute) -
+      Math.ceil((b.timing.lastDeliveryMinute ?? b.departureMinute) - b.departureMinute);
+}
+
+/** Uses directed road distances to choose only the shop-to-last-stop order.
+ * Round-trip distances remain in cost and worksheet metrics. Up to ten orders:
+ * subset dynamic programming gives optimal primary objectives. Larger rounds: deterministic
  * multi-start search with exact stop ordering and pairwise reallocation.
  */
 export function optimizeDeliveryRoutes(
@@ -96,24 +110,23 @@ export function optimizeDeliveryRoutes(
       const scheduled = { riderId: 0, riderName: '', totalBoxes: members.reduce((sum, index) => sum + input[index].boxQuantity, 0),
         route, roundNumber: 1, departureMinute: departure, timing: calculateRouteTiming(route, departure, deadline, speed) };
       const trip: PlannedTrip = { ...scheduled, cost: calculateTripCost(scheduled, true) };
-      if (!best || trip.timing.lateOrderCount < best.timing.lateOrderCount ||
-          (trip.timing.lateOrderCount === best.timing.lateOrderCount &&
-           (trip.cost.profit > best.cost.profit || (trip.cost.profit === best.cost.profit && route.totalDistanceKm < best.route.totalDistanceKm - 1e-9)))) best = trip;
+      if (!best || compareTrips(trip, best) < 0) best = trip;
     };
     visit([], [...members].sort((a, b) => a - b));
     cache.set(key, best!);
     return best!;
   };
   const score = (allocation: readonly (readonly number[])[]): Score => {
-    const value = { count: 0, late: 0, profit: 0, minutes: 0, distance: 0 };
+    const value = { count: 0, late: 0, outboundCost: 0, outboundDistance: 0, outboundMinutes: 0 };
     for (const members of allocation) {
       if (!members.length) continue;
       const trip = group(members);
       value.count += members.length;
       value.late += trip.timing.lateOrderCount;
-      value.profit += Math.round(trip.cost.profit * 100);
-      value.minutes = Math.max(value.minutes, trip.timing.totalTravelMinutes);
-      value.distance += trip.route.totalDistanceKm;
+      value.outboundCost += outboundCost(trip);
+      value.outboundDistance += outboundDistanceKm(trip);
+      value.outboundMinutes = Math.max(value.outboundMinutes,
+        (trip.timing.lastDeliveryMinute ?? trip.departureMinute) - trip.departureMinute);
     }
     return value;
   };
@@ -135,8 +148,8 @@ export function optimizeDeliveryRoutes(
     (input[index].longitude - store.longitude) * Math.cos(store.latitude * Math.PI / 180),
     input[index].latitude - store.latitude);
   const seeds: number[][] = [
-    [...allIndices].sort((a, b) => km(-1, a) + km(a, -1) - km(-1, b) - km(b, -1) || a - b),
-    [...allIndices].sort((a, b) => km(-1, b) + km(b, -1) - km(-1, a) - km(a, -1) || a - b),
+    [...allIndices].sort((a, b) => km(-1, a) - km(-1, b) || a - b),
+    [...allIndices].sort((a, b) => km(-1, b) - km(-1, a) || a - b),
   ];
   for (const offset of [0, Math.PI * 2 / 3, Math.PI * 4 / 3]) {
     const angle = (index: number) => (bearing(index) - offset + Math.PI * 4) % (Math.PI * 2);
@@ -153,8 +166,9 @@ export function optimizeDeliveryRoutes(
         let bestIncrease = Infinity;
         for (const index of remaining) {
           if (!valid([...existing, index], caps[riderIndex])) continue;
-          // The first seed chooses an anchor. Subsequent points minimise added road cost.
-          const increase = existing.length ? group([...existing, index]).cost.totalCost - group(existing).cost.totalCost : 0;
+          // Choose the next stop by added outbound distance, without a return leg.
+          const increase = existing.length ?
+            outboundCost(group([...existing, index])) - outboundCost(group(existing)) : 0;
           if (increase < bestIncrease - 1e-9) { next = index; bestIncrease = increase; }
         }
         if (next < 0) break;
