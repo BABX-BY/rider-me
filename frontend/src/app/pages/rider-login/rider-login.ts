@@ -17,8 +17,14 @@ export class RiderLogin implements OnInit {
   protected readonly loading = signal(false);
   protected readonly errorMessage = signal('');
 
-  ngOnInit(): void {
-    if (this.auth.getWorksheetCode()) {
+  async ngOnInit(): Promise<void> {
+    const queryCode = this.route.snapshot.queryParamMap.get('worksheetCode')?.trim().toUpperCase();
+    const currentCode = this.auth.getWorksheetCode();
+
+    if (queryCode) {
+      this.worksheetCode.set(queryCode);
+      await this.executeLogin(queryCode);
+    } else if (currentCode) {
       void this.router.navigate(['/rider/work']);
     }
   }
@@ -28,24 +34,24 @@ export class RiderLogin implements OnInit {
   }
 
   protected async login(): Promise<void> {
-    this.errorMessage.set('');
-    if (!this.worksheetCode().trim()) {
+    const code = this.worksheetCode().trim().toUpperCase();
+    if (!code) {
       this.errorMessage.set('กรุณากรอกเลขใบงาน');
       return;
     }
+    await this.executeLogin(code);
+  }
 
-    const worksheetCode = this.route.snapshot.queryParamMap.get('worksheetCode');
-    if (worksheetCode) {
-      this.worksheetCode.set(worksheetCode.trim().toUpperCase());
-    }
-
+  private async executeLogin(code: string): Promise<void> {
+    this.errorMessage.set('');
     this.loading.set(true);
+
     try {
-      await this.auth.loginByWorksheet(this.worksheetCode());
+      await this.auth.loginByWorksheet(code);
       await this.router.navigate(['/rider/work']);
     } catch (error) {
       console.error('Rider login failed:', error);
-      this.errorMessage.set('เข้าสู่ระบบไม่สำเร็จ กรุณาตรวจสอบข้อมูลอีกครั้ง');
+      this.errorMessage.set('เข้าสู่ระบบไม่สำเร็จ กรุณาตรวจสอบเลขใบงานอีกครั้ง');
     } finally {
       this.loading.set(false);
     }
