@@ -16,7 +16,9 @@ export class RoadMatrixError extends Error {
 }
 
 const cache = new Map<string, { expires: number; matrix: RoadDistanceMatrix }>();
-const CACHE_TTL_MS = 5 * 60 * 1000;
+// ระยะทางชุดเดิมใช้ซ้ำได้ระหว่างการวางแผนและการเปิดดูใบงาน
+// ลดการเรียก OSRM ซ้ำ แต่ยังหมดอายุเป็นระยะเพื่อรองรับพิกัด/ถนนที่เปลี่ยนแปลง
+const CACHE_TTL_MS = 60 * 60 * 1000;
 const unavailable = () => new RoadMatrixError(503,
   "โหลดระยะทางตามถนนไม่สำเร็จ กรุณาลองคำนวณใหม่ ระบบยังไม่บันทึกใบงาน");
 

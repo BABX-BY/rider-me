@@ -184,7 +184,9 @@ export function optimizeDeliveryRoutes(
     let currentScore = score(current);
     // Every accepted change strictly improves the same objective; stop at a local
     // optimum or this deterministic work bound (never random "lucky" results).
-    for (let iteration = 0; iteration < 60; iteration += 1) {
+    // จำกัดรอบปรับปรุงเพื่อให้การคำนวณ 20–30 ออเดอร์จบเร็วขึ้น
+    // โดยยังคงเริ่มจากหลายรูปแบบและรับเฉพาะการเปลี่ยนที่ทำให้ผลดีขึ้น
+    for (let iteration = 0; iteration < 20; iteration += 1) {
       let best = current;
       let bestScore = currentScore;
       for (let first = 0; first < caps.length; first += 1) {

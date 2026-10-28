@@ -6,7 +6,8 @@ export interface RoadRouteGeometry {
   waypoints: MapPosition[];
 }
 
-const cache = new Map<string, RoadRouteGeometry>();
+const cache = new Map<string, { expires: number; geometry: RoadRouteGeometry }>();
+const CACHE_TTL_MS = 60 * 60 * 1000;
 
 // OSRM keeps the requested stop order and returns the road geometry plus its
 // snapped road positions, so map pins can stay on the actual customer coords.
@@ -21,7 +22,8 @@ export async function getRoadRoute(
 
   const coordinates = points.map(([lat, lng]) => `${lng},${lat}`).join(';');
   const cached = cache.get(coordinates);
-  if (cached) return cached;
+  if (cached && cached.expires > Date.now()) return cached.geometry;
+  if (cached) cache.delete(coordinates);
   const response = await fetch(
     `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=false&continue_straight=false&radiuses=${points.map(() => 100).join(';')}&generate_hints=false`,
     { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) },
@@ -52,6 +54,6 @@ export async function getRoadRoute(
   };
   signal.throwIfAborted();
   if (cache.size >= 100) cache.delete(cache.keys().next().value!);
-  cache.set(coordinates, result);
+  cache.set(coordinates, { expires: Date.now() + CACHE_TTL_MS, geometry: result });
   return result;
 }
