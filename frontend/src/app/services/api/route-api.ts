@@ -9,16 +9,24 @@ export interface PlanningStoreResponse {
 }
 
 export interface SelectedPlanRequest {
+  distanceBasis?: 'road' | 'haversine';
   routeDate: string;
   storeId: number;
   storeLatitude: number;
   storeLongitude: number;
   orders: { orderId: number; customerId: number; boxQuantity: number; latitude: number; longitude: number }[];
-  trips: { riderId: number; orderIds: number[] }[];
+  trips: { riderId: number; orderIds: number[]; roadLegDistancesKm?: number[] }[];
+}
+
+export interface RoadDistanceMatrix {
+  points: { latitude: number; longitude: number }[];
+  distancesKm: number[][];
+  distanceBasis: 'road';
 }
 
 export interface ConfirmedPlanResponse {
   message: string;
+  distanceBasis?: 'road' | 'haversine';
   plans: { routePlanId: number; riderId: number; worksheetCode: string }[];
 }
 
@@ -68,6 +76,12 @@ export interface RouteStopRecord {
 export class RouteApi {
   private readonly http = inject(HttpClient);
   private readonly api = inject(Api);
+
+  async getRoadMatrix(points: RoadDistanceMatrix['points']): Promise<RoadDistanceMatrix> {
+    return lastValueFrom(this.http.post<RoadDistanceMatrix>(
+      `${this.api.API_ENDPOINT}/route-plans/road-matrix`, { points },
+    ));
+  }
 
   async getRoutePlans(date?: string, status = 'SELECTED'): Promise<RoutePlanRecord[]> {
     let params = new HttpParams().set('status', status);

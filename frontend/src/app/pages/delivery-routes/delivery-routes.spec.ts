@@ -8,16 +8,14 @@ import { OrderApi } from '../../services/api/order-api';
 import { RiderApi } from '../../services/api/rider-api';
 import { RouteApi } from '../../services/api/route-api';
 import { DeliveryRoutes } from './delivery-routes';
-import {
-  buildRoutePlanAlternatives,
-  type RoutePlanAlternative,
-} from './planning/route-alternatives';
+import type { RoutePlanAlternative } from './planning/route-alternatives';
+import { optimizeDeliveryRoutes } from './planning/route-optimizer';
 import { preparePlanningOrders } from './planning/planning-orders';
 import { planDeliveryRoutes } from './planning/route-planner';
 import { PREVIEW_STORE } from './preview/delivery-routes.preview';
 
-vi.mock('./planning/route-alternatives', () => ({
-  buildRoutePlanAlternatives: vi.fn(),
+vi.mock('./planning/route-optimizer', () => ({
+  optimizeDeliveryRoutes: vi.fn(),
 }));
 
 const date = '2026-10-25';
@@ -51,6 +49,7 @@ class Controller extends DeliveryRoutes {
     date: this.businessDate,
     dateLabel: this.businessDateLabel,
     loading: this.dataLoading,
+    calculating: this.calculating,
     dataError: this.dataError,
     prepared: this.preparedOrders,
     alternatives: this.planAlternatives,
@@ -101,6 +100,7 @@ describe('delivery route plan selection', () => {
   const getRiders = vi.fn<() => Promise<Rider[]>>();
   const getPlanningStore = vi.fn();
   const getRoutePlans = vi.fn();
+  const getRoadMatrix = vi.fn();
   const confirmSelectedPlan = vi.fn();
   let controller: Controller;
   let alternatives: RoutePlanAlternative[];
@@ -109,6 +109,7 @@ describe('delivery route plan selection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getOrders.mockReset().mockResolvedValue(orders);
+    getRoadMatrix.mockReset().mockImplementation(async (points) => ({ points, distancesKm: points.map(() => points.map(() => 1)), distanceBasis: 'road' }));
     getRoutePlans.mockReset().mockResolvedValue([]);
     getRiders.mockReset().mockResolvedValue(riders);
     getPlanningStore.mockReset().mockResolvedValue({
@@ -140,13 +141,13 @@ describe('delivery route plan selection', () => {
         ),
       },
     ];
-    vi.mocked(buildRoutePlanAlternatives).mockReset().mockReturnValue(alternatives);
+    vi.mocked(optimizeDeliveryRoutes).mockReset().mockReturnValue(alternatives);
 
     const injector = Injector.create({
       providers: [
         { provide: OrderApi, useValue: { getOrders } },
         { provide: RiderApi, useValue: { getRiders } },
-        { provide: RouteApi, useValue: { getPlanningStore, confirmSelectedPlan, getRoutePlans } },
+        { provide: RouteApi, useValue: { getPlanningStore, confirmSelectedPlan, getRoutePlans, getRoadMatrix } },
       ],
     });
     destroyInjector = () => injector.destroy();
@@ -165,12 +166,12 @@ describe('delivery route plan selection', () => {
     expect(getOrders).toHaveBeenCalledWith(date);
     expect(controller.state.date()).toBe(date);
     expect(getRiders).toHaveBeenCalledTimes(1);
-    expect(buildRoutePlanAlternatives).toHaveBeenCalledTimes(1);
-    expect(buildRoutePlanAlternatives).toHaveBeenCalledWith(
+    expect(optimizeDeliveryRoutes).toHaveBeenCalledTimes(1);
+    expect(optimizeDeliveryRoutes).toHaveBeenCalledWith(
       store,
       controller.state.prepared()!.items.map((item) => item.routing),
       riders,
-      { includeReturnDistance: true, singleTripPerRider: true },
+      expect.objectContaining({ distanceBasis: 'road', points: expect.any(Array), distancesKm: expect.any(Array) }),
     );
     expect(controller.state.selectedId()).toBe('one-rider');
     expect(controller.state.selectedNumber()).toBe(1);
@@ -178,21 +179,18 @@ describe('delivery route plan selection', () => {
     expect(controller.state.routes()[0].stops[0].customer).toContain('ลูกค้า 101');
   });
 
-  it('cycles distinct plans and wraps without reloading or rebuilding the input snapshot', async () => {
+  it('recalculates with refreshed inputs instead of cycling old alternatives', async () => {
     await controller.calculate();
-    const prepared = controller.state.prepared();
-
-    await controller.calculate();
-    expect(controller.state.result()).toBe(alternatives[1].result);
-    expect(controller.state.selectedNumber()).toBe(2);
-    expect(controller.state.message()).toContain('2 จาก 2');
-
+    controller.choose('two-riders');
+    getOrders.mockResolvedValue([orders[0]]);
+    vi.mocked(optimizeDeliveryRoutes).mockReturnValue([alternatives[0]]);
     await controller.calculate();
     expect(controller.state.result()).toBe(alternatives[0].result);
-    expect(controller.state.prepared()).toBe(prepared);
-    expect(getOrders).toHaveBeenCalledTimes(1);
-    expect(getRiders).toHaveBeenCalledTimes(1);
-    expect(buildRoutePlanAlternatives).toHaveBeenCalledTimes(1);
+    expect(controller.state.prepared()!.items).toHaveLength(1);
+    expect(getOrders).toHaveBeenCalledTimes(2);
+    expect(getRoadMatrix).toHaveBeenCalledTimes(2);
+    expect(optimizeDeliveryRoutes).toHaveBeenCalledTimes(2);
+    expect(controller.state.message()).toContain('ข้อมูลล่าสุด');
   });
 
   it('selects a valid alternative atomically for summary and routes and clears map selection', async () => {
@@ -235,7 +233,7 @@ describe('delivery route plan selection', () => {
 
     expect(controller.state.loading()).toBe(false);
     expect(getOrders).toHaveBeenCalledTimes(2);
-    expect(buildRoutePlanAlternatives).toHaveBeenCalledTimes(1);
+    expect(optimizeDeliveryRoutes).toHaveBeenCalledTimes(1);
   });
 
   it('uses the new backend business day on reload and discards the previous plan', async () => {
@@ -255,7 +253,7 @@ describe('delivery route plan selection', () => {
     expect(getOrders).toHaveBeenLastCalledWith('2026-10-26');
     expect(controller.state.prepared()!.items).toEqual([]);
     expect(getOrders).toHaveBeenCalledTimes(2);
-    expect(buildRoutePlanAlternatives).toHaveBeenCalledTimes(1);
+    expect(optimizeDeliveryRoutes).toHaveBeenCalledTimes(1);
   });
 
   it('waits for the backend date before requesting orders', async () => {
@@ -282,8 +280,8 @@ describe('delivery route plan selection', () => {
     expect(controller.state.canConfirm()).toBe(false);
   });
 
-  it('retains a singleton plan and reports that no other distinct plan was found', async () => {
-    vi.mocked(buildRoutePlanAlternatives).mockReturnValue([alternatives[0]]);
+  it('recalculates a singleton and clears the previous map selection', async () => {
+    vi.mocked(optimizeDeliveryRoutes).mockReturnValue([alternatives[0]]);
     await controller.calculate();
     controller.chooseStop(101);
 
@@ -291,10 +289,10 @@ describe('delivery route plan selection', () => {
 
     expect(controller.state.result()).toBe(alternatives[0].result);
     expect(controller.state.selectedNumber()).toBe(1);
-    expect(controller.state.selectedStopId()).toBe(101);
-    expect(controller.state.message()).toContain('ยังไม่พบแผนอื่น');
-    expect(getOrders).toHaveBeenCalledTimes(1);
-    expect(buildRoutePlanAlternatives).toHaveBeenCalledTimes(1);
+    expect(controller.state.selectedStopId()).toBeNull();
+    expect(controller.state.message()).toContain('ข้อมูลล่าสุด');
+    expect(getOrders).toHaveBeenCalledTimes(2);
+    expect(optimizeDeliveryRoutes).toHaveBeenCalledTimes(2);
   });
 
   it('keeps the plan empty when the API fails', async () => {
@@ -307,7 +305,7 @@ describe('delivery route plan selection', () => {
     expect(controller.state.result()).toBeNull();
     expect(controller.state.alternatives()).toEqual([]);
     expect(controller.state.routes()).toEqual([]);
-    expect(buildRoutePlanAlternatives).not.toHaveBeenCalled();
+    expect(optimizeDeliveryRoutes).not.toHaveBeenCalled();
   });
 
   it('does not build plans when today has no pending orders', async () => {
@@ -320,7 +318,7 @@ describe('delivery route plan selection', () => {
     expect(controller.state.result()).toBeNull();
     expect(controller.state.alternatives()).toEqual([]);
     expect(controller.state.routes()).toEqual([]);
-    expect(buildRoutePlanAlternatives).not.toHaveBeenCalled();
+    expect(optimizeDeliveryRoutes).not.toHaveBeenCalled();
   });
   it('confirms the currently selected alternative and opens the saved worksheets', async () => {
     await controller.calculate();
@@ -329,7 +327,9 @@ describe('delivery route plan selection', () => {
     const payload = confirmSelectedPlan.mock.calls[0][0];
     expect(payload.trips).toEqual(alternatives[1].result.trips.map((trip) => ({
       riderId: trip.riderId, orderIds: trip.route.stops.map((stop) => stop.orderId),
+      roadLegDistancesKm: [...trip.route.stops.map((stop) => stop.distanceFromPreviousKm), trip.route.returnDistanceKm],
     })));
+    expect(payload.distanceBasis).toBe('road');
     expect(payload.storeId).toBe(store.id);
     expect(payload.routeDate).toBe(date);
     expect(payload.orders.map((order: { orderId: number }) => order.orderId).sort()).toEqual([101, 102]);
@@ -405,9 +405,47 @@ describe('delivery route plan selection', () => {
   it('prevents creating another plan over existing worksheets', async () => {
     getRoutePlans.mockResolvedValue([{ status: 'SELECTED' }]);
     await controller.calculate();
-    expect(buildRoutePlanAlternatives).not.toHaveBeenCalled();
+    expect(optimizeDeliveryRoutes).not.toHaveBeenCalled();
     expect(controller.state.planError()).toContain('มีใบงานยืนยันแล้ว');
     expect(controller.state.canConfirm()).toBe(false);
+  });
+
+  it('does not fall back to straight-line totals when the road service is unavailable', async () => {
+    getRoadMatrix.mockRejectedValue({ status: 503, error: { message: 'บริการถนนไม่พร้อม กรุณาลองใหม่' } });
+    await controller.calculate();
+    expect(controller.state.planError()).toContain('บริการถนนไม่พร้อม');
+    expect(controller.state.result()).toBeNull();
+    expect(controller.state.canConfirm()).toBe(false);
+    expect(controller.state.calculating()).toBe(false);
+    expect(optimizeDeliveryRoutes).not.toHaveBeenCalled();
+  });
+
+  it('explains a backend that has not deployed the new road API', async () => {
+    getRoadMatrix.mockRejectedValue({ status: 404 });
+    await controller.calculate();
+    expect(controller.state.planError()).toContain('deploy Backend');
+    expect(controller.state.canConfirm()).toBe(false);
+  });
+
+  it('prevents duplicate calculation, reload and confirmation during the road request', async () => {
+    let finish!: (value: unknown) => void;
+    let requestPoints: unknown;
+    getRoadMatrix.mockImplementation((points) => {
+      requestPoints = points;
+      return new Promise((resolve) => { finish = resolve; });
+    });
+    const pending = controller.calculate();
+    await vi.waitFor(() => expect(controller.state.calculating()).toBe(true));
+    await controller.calculate();
+    await controller.reload();
+    await controller.confirm();
+    expect(getOrders).toHaveBeenCalledTimes(1);
+    expect(getRoadMatrix).toHaveBeenCalledTimes(1);
+    expect(confirmSelectedPlan).not.toHaveBeenCalled();
+    finish({ points: requestPoints, distancesKm: [], distanceBasis: 'road' });
+    await pending;
+    expect(controller.state.calculating()).toBe(false);
+    expect(controller.state.canConfirm()).toBe(true);
   });
 
 });

@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import { BUSINESS_DATE_SQL } from "../database/business-date.js";
+import { getRoadDistanceMatrix } from "./road-matrix.js";
 
 export interface PlanningStore {
   store_id: number;
@@ -22,7 +23,8 @@ export interface SelectedPlan {
   storeLatitude: number;
   storeLongitude: number;
   orders: OrderSnapshot[];
-  trips: { riderId: number; orderIds: number[] }[];
+  distanceBasis?: "road" | "haversine";
+  trips: { riderId: number; orderIds: number[]; roadLegDistancesKm?: number[] }[];
 }
 
 export class PlanError extends Error {
@@ -56,13 +58,17 @@ function coordinate(value: unknown, limit: number): number {
 
 export function parseSelectedPlan(body: unknown): SelectedPlan {
   const data = record(body);
+  if (data.distanceBasis !== undefined && data.distanceBasis !== "road" && data.distanceBasis !== "haversine") {
+    invalid("วิธีคำนวณระยะทางไม่ถูกต้อง");
+  }
+  const distanceBasis = data.distanceBasis ?? "haversine";
   if (typeof data.routeDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(data.routeDate) ||
       !Number.isFinite(new Date(data.routeDate + "T00:00:00Z").getTime()) ||
       new Date(data.routeDate + "T00:00:00Z").toISOString().slice(0, 10) !== data.routeDate) {
     invalid("วันที่แผนไม่ถูกต้อง");
   }
   if (!Array.isArray(data.trips) || data.trips.length === 0 || data.trips.length > 1000 ||
-      !Array.isArray(data.orders) || data.orders.length === 0 || data.orders.length > 3000) {
+      !Array.isArray(data.orders) || data.orders.length === 0 || data.orders.length > (distanceBasis === "road" ? 30 : 3000)) {
     invalid("กรุณาเลือกแผนที่มีออเดอร์ก่อนยืนยัน");
   }
   const orders = data.orders.map((value): OrderSnapshot => {
@@ -80,7 +86,18 @@ export function parseSelectedPlan(body: unknown): SelectedPlan {
     if (!Array.isArray(trip.orderIds) || trip.orderIds.length < 1 || trip.orderIds.length > 3) {
       invalid("ไรเดอร์รับได้ไม่เกินคนละ 3 ออเดอร์");
     }
-    return { riderId: positiveId(trip.riderId), orderIds: trip.orderIds.map(positiveId) };
+    const parsedTrip: SelectedPlan["trips"][number] = {
+      riderId: positiveId(trip.riderId), orderIds: trip.orderIds.map(positiveId),
+    };
+    if (distanceBasis === "road") {
+      if (!Array.isArray(trip.roadLegDistancesKm) || trip.roadLegDistancesKm.length !== trip.orderIds.length + 1 ||
+          trip.roadLegDistancesKm.some((distance: unknown) => typeof distance !== "number" ||
+            !Number.isFinite(distance) || distance < 0 || distance > 10000)) {
+        invalid("ข้อมูลระยะถนนของแผนไม่ครบ กรุณาคำนวณใหม่");
+      }
+      parsedTrip.roadLegDistancesKm = [...trip.roadLegDistancesKm];
+    }
+    return parsedTrip;
   });
   const ids = trips.flatMap((trip) => trip.orderIds);
   if (new Set(trips.map((trip) => trip.riderId)).size !== trips.length) {
@@ -93,12 +110,19 @@ export function parseSelectedPlan(body: unknown): SelectedPlan {
   return {
     routeDate: data.routeDate, storeId: positiveId(data.storeId),
     storeLatitude: coordinate(data.storeLatitude, 90), storeLongitude: coordinate(data.storeLongitude, 180),
-    orders, trips,
+    orders, trips, distanceBasis,
   };
 }
 
 // คำนวณซ้ำเฉพาะลำดับที่ผู้ใช้เลือก ไม่จัดกลุ่มหรือสลับลำดับใหม่
-export function selectedTripMetrics(store: { latitude: number; longitude: number }, orders: readonly OrderSnapshot[]) {
+export function selectedTripMetrics(
+  store: { latitude: number; longitude: number }, orders: readonly OrderSnapshot[],
+  legDistancesKm?: readonly number[],
+) {
+  if (legDistancesKm && (legDistancesKm.length !== orders.length + 1 ||
+      legDistancesKm.some((distance) => !Number.isFinite(distance) || distance < 0))) {
+    invalid("ข้อมูลระยะทางของจุดส่งไม่ถูกต้อง");
+  }
   const distance = (from: typeof store, to: typeof store) => {
     const rad = (degrees: number) => degrees * Math.PI / 180;
     const a = Math.sin(rad(to.latitude - from.latitude) / 2) ** 2 +
@@ -110,13 +134,14 @@ export function selectedTripMetrics(store: { latitude: number; longitude: number
   let previous = store;
   let cumulative = 0;
   const stops = orders.map((order, index) => {
-    const distanceKm = distance(previous, order);
+    const distanceKm = legDistancesKm ? legDistancesKm[index]! : distance(previous, order);
     cumulative += distanceKm;
     previous = order;
     const arrivalMinute = 690 + cumulative / 30 * 60;
     return { orderId: order.orderId, sequence: index + 1, distanceKm, arrivalMinute, isLate: arrivalMinute > 750 };
   });
-  const totalDistanceKm = cumulative + (orders.length ? distance(previous, store) : 0);
+  const totalDistanceKm = cumulative + (orders.length ?
+    (legDistancesKm ? legDistancesKm[orders.length]! : distance(previous, store)) : 0);
   const boxes = orders.reduce((sum, order) => sum + order.boxQuantity, 0);
   const revenue = boxes * 65;
   const penalty = stops.filter((stop) => stop.isLate).length * 20;
@@ -127,6 +152,24 @@ export function selectedTripMetrics(store: { latitude: number; longitude: number
 
 export async function confirmSelectedPlan(pool: Pick<Pool, "connect">, body: unknown) {
   const plan = parseSelectedPlan(body);
+  // Fetch before taking database locks. The transaction below still verifies every
+  // coordinate against current database records before any provider metric is used.
+  const matrixOrders = [...plan.orders].sort((a, b) => a.orderId - b.orderId);
+  const matrix = plan.distanceBasis === "road" ? await getRoadDistanceMatrix([
+    { latitude: plan.storeLatitude, longitude: plan.storeLongitude }, ...matrixOrders,
+  ]) : null;
+  const matrixIndex = new Map(matrixOrders.map((order, index) => [order.orderId, index + 1]));
+  const roadLegs = new Map<number, number[]>();
+  if (matrix) {
+    for (const trip of plan.trips) {
+      const indices = [0, ...trip.orderIds.map((id) => matrixIndex.get(id)!), 0];
+      const legs = indices.slice(1).map((to, index) => matrix.distancesKm[indices[index]!]![to]!);
+      if (legs.some((distance, index) => Math.abs(distance - trip.roadLegDistancesKm![index]!) > 1e-6)) {
+        throw new PlanError(409, "ระยะทางถนนเปลี่ยนจากแผนที่แสดง กรุณาคำนวณใหม่ก่อนยืนยัน");
+      }
+      roadLegs.set(trip.riderId, legs);
+    }
+  }
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -188,7 +231,10 @@ export async function confirmSelectedPlan(pool: Pick<Pool, "connect">, body: unk
       }
       const ordered = trip.orderIds.map((id) => actualOrders.get(id)!);
       if (ordered.reduce((sum, order) => sum + order.boxQuantity, 0) > 10) invalid("จำนวนกล่องเกินความจุ 10 กล่อง");
-      return { trip, metrics: selectedTripMetrics({ latitude: Number(store.latitude), longitude: Number(store.longitude) }, ordered) };
+      return { trip, metrics: selectedTripMetrics(
+        { latitude: Number(store.latitude), longitude: Number(store.longitude) }, ordered,
+        roadLegs.get(trip.riderId),
+      ) };
     });
     const versions = await client.query(`SELECT COALESCE(MAX(version), 0)::int AS version FROM route_plans WHERE route_date = $1`, [today]);
     const version = versions.rows[0].version + 1;
@@ -215,7 +261,8 @@ export async function confirmSelectedPlan(pool: Pick<Pool, "connect">, body: unk
     }
     await client.query(`UPDATE orders SET status = 'ASSIGNED' WHERE order_id = ANY($1::int[])`, [ids]);
     await client.query("COMMIT");
-    return { message: "บันทึกแผนที่เลือกและสร้างใบงานสำเร็จ", plans: created };
+    return { message: "บันทึกแผนที่เลือกและสร้างใบงานสำเร็จ", plans: created,
+      distanceBasis: plan.distanceBasis ?? "haversine" };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

@@ -33,7 +33,7 @@
         [disabled]="busy() || !preparedOrders()?.items?.length || savedPlanCount() > 0 || !!confirmation()"
         (click)="calculatePlan()"
       >
-        {{ planResult() ? 'คำนวณใหม่' : 'จัดเส้นทาง' }}
+        {{ calculating() ? 'กำลังคำนวณถนน...' : (planResult() ? 'คำนวณเส้นทางใหม่' : 'จัดเส้นทาง') }}
       </button>
     </div>
   </header>
@@ -44,6 +44,8 @@
   >
     @if (dataLoading()) {
       <p>กำลังโหลดออเดอร์และไรเดอร์...</p>
+    } @else if (calculating()) {
+      <p><span class="loading loading-spinner loading-xs" aria-hidden="true"></span> กำลังเปรียบเทียบกลุ่มงานและลำดับส่งจากระยะตามถนน...</p>
     } @else if (dataError()) {
       <p class="text-error" role="alert">
         {{ dataError() }}
@@ -64,6 +66,9 @@
       </p>
     }
   </div>
+  @if (planError() && !planResult()) {
+    <p class="rounded-box border border-error/30 p-3 text-sm text-error" role="alert">{{ planError() }}</p>
+  }
 
   @if (!planResult() && !dataLoading() && !dataError()) {
     <section class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm" aria-label="ข้อมูลก่อนจัดเส้นทาง">
@@ -203,10 +208,7 @@
         <fieldset class="alternative-plans" [disabled]="busy() || !!confirmation()">
           <legend class="sr-only">เลือกแผนการจัดส่ง</legend>
           <p class="mt-1 text-xs text-base-content/60">
-            แผนทั้งหมดใช้ข้อมูลชุดเดียวกัน โหลดข้อมูลใหม่เพื่อใช้ออเดอร์และไรเดอร์ล่าสุด
-            @if (planAlternatives().length > 1) {
-              · กดคำนวณใหม่เพื่อดูแผนถัดไป
-            }
+            เลือกแผนด้านล่างเพื่อเปรียบเทียบ · คำนวณเส้นทางใหม่จะโหลดออเดอร์และไรเดอร์ล่าสุด
           </p>
           <p class="mt-1 text-xs text-base-content/60">
             แนะนำในชุดนี้จากการจัดงานได้มาก ส่งช้าน้อย และกำไรสูง · ต้นทุนรวมค่าปรับคาดการณ์แล้ว
@@ -277,7 +279,17 @@
     }
 
     @if (plan) {
-      <p class="mt-3 text-xs text-base-content/60">ต้นทุนรวมอาหาร ค่าส่ง และค่าปรับคาดการณ์ · ระยะทางใช้ Haversine และเวลาประมาณที่ 30 กม./ชม.</p>
+      <p class="mt-3 text-xs text-base-content/60">คำนวณตามถนนรวมกลับร้าน · เวลาใช้ความเร็ว 30 กม./ชม. ตามโจทย์ · คำนวณล่าสุด {{ calculationTime() }} น.</p>
+      <details class="mt-3 text-sm text-base-content/70">
+        <summary class="cursor-pointer">ดูที่มารายได้และต้นทุน</summary>
+        <div class="mt-2 space-y-1">
+          <p>รายรับ {{ plan.summary.assignedBoxCount }} × 65 = {{ plan.summary.totalRevenue | number:'1.2-2' }} บาท</p>
+          <p>อาหาร {{ plan.summary.assignedBoxCount }} × 40 = {{ costBreakdown().food | number:'1.2-2' }} บาท · ค่าเรียก {{ plan.summary.tripCount }} × 15 = {{ costBreakdown().dispatch | number:'1.2-2' }} บาท</p>
+          <p>ขนส่งรวม {{ costBreakdown().transport | number:'1.2-2' }} บาท (รวมแต่ละรอบ: กม.ไปกลับ × กล่องในรอบ × 2 · ปัดเงิน 2 ตำแหน่งต่อใบงาน)</p>
+          <p>ค่าปรับ {{ plan.summary.lateOrderCount }} × 20 = {{ plan.summary.estimatedPenalty | number:'1.2-2' }} บาท · กำไร = รายรับ − ต้นทุนรวม</p>
+          <p class="text-xs">เลือกแผนที่จัดงานได้มาก ส่งช้าน้อย แล้วเปรียบเทียบกำไรและเวลา · ค้นหาหลายกลุ่มและสลับงานซ้ำ แต่ไม่รับรองว่าดีที่สุดในทุกกรณี</p>
+        </div>
+      </details>
 
       @for (warning of plan.warnings; track $index) {
         <p class="mt-2 text-sm text-warning" role="status">

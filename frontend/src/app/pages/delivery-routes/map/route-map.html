@@ -38,7 +38,7 @@
   </div>
   <div class="delivery-map__footer">
     <span
-      >เลื่อนล้อเมาส์เพื่อซูม · {{ routes.length ? 'เส้นสี: ตามถนนรวมทางกลับร้าน' : 'หมุดสีเทา: ออเดอร์รอจัดเส้นทาง' }}
+      >เลื่อนล้อเมาส์เพื่อซูม · {{ routes.length ? 'เส้นสี: จากร้านถึงจุดส่งสุดท้าย' : 'หมุดสีเทา: ออเดอร์รอจัดเส้นทาง' }}
       @if (usingFallback()) {
         <span role="status" title="MapTiler โหลดไม่ได้ จึงใช้ OpenStreetMap สำรอง">
           · ใช้แผนที่สำรอง</span
@@ -48,7 +48,7 @@
     <span role="status">
       @if (roadLoading()) { กำลังโหลดเส้นทางตามถนน... }
       @else if (roadFailed()) { บริการถนนบางเส้นทางขัดข้อง ใช้เส้นประเชื่อมพิกัดสำรอง }
-      @else if (routes.length) { เส้นทางจาก OSRM · ระยะและต้นทุนในสรุปประมาณจากพิกัด }
+      @else if (routes.length) { ถนนจาก OSRM · ตามลำดับแผนที่เลือก }
     </span>
   </div>
 </div>

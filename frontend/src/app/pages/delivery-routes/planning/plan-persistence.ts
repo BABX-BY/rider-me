@@ -13,8 +13,10 @@ export function toSelectedPlanRequest(
   store: PlanningStore,
   routeDate: string,
   plan: RoutePlanResult,
+  distanceBasis: 'road' | 'haversine' = 'haversine',
 ): SelectedPlanRequest {
   return {
+    ...(distanceBasis === 'road' ? { distanceBasis } : {}),
     routeDate,
     storeId: store.id,
     storeLatitude: store.latitude,
@@ -22,6 +24,9 @@ export function toSelectedPlanRequest(
     trips: plan.trips.map((trip) => ({
       riderId: trip.riderId,
       orderIds: trip.route.stops.map((stop) => stop.orderId),
+      ...(distanceBasis === 'road' ? { roadLegDistancesKm: [
+        ...trip.route.stops.map((stop) => stop.distanceFromPreviousKm), trip.route.returnDistanceKm,
+      ] } : {}),
     })),
     orders: plan.trips.flatMap((trip) => trip.route.stops.map((stop) => ({
       orderId: stop.orderId,

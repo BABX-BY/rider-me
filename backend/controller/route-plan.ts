@@ -2,8 +2,22 @@ import express from "express";
 import { pool } from "../database/pool.js";
 import { BUSINESS_DATE_SQL } from "../database/business-date.js";
 import { confirmSelectedPlan, PlanError } from "../services/selected-plan.js";
+import { getRoadDistanceMatrix, parseRoadPoints, RoadMatrixError } from "../services/road-matrix.js";
 
 export const routePlanRouter = express.Router();
+
+routePlanRouter.post("/road-matrix", async (req, res) => {
+  try {
+    const points = parseRoadPoints(req.body?.points);
+    res.json(await getRoadDistanceMatrix(points));
+  } catch (error) {
+    if (error instanceof RoadMatrixError) {
+      res.status(error.status).json({ message: error.message });
+      return;
+    }
+    res.status(503).json({ message: "โหลดระยะทางถนนไม่สำเร็จ กรุณาลองใหม่" });
+  }
+});
 
 // ใช้ร้านเดียวกับที่จะบันทึกจริง แทนพิกัดตัวอย่างใน Frontend
 routePlanRouter.get("/planning-store", async (_req, res) => {
@@ -31,7 +45,7 @@ routePlanRouter.post(["/confirm", "/generate"], async (req, res) => {
     const result = await confirmSelectedPlan(pool, req.body);
     res.status(201).json(result);
   } catch (error) {
-    if (error instanceof PlanError) {
+    if (error instanceof PlanError || error instanceof RoadMatrixError) {
       res.status(error.status).json({ message: error.message });
       return;
     }

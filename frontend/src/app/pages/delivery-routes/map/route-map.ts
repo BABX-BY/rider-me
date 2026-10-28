@@ -15,7 +15,7 @@ import {
 import * as L from 'leaflet';
 import { MAPTILER_API_KEY } from '../../../config/map';
 import type { RouteMapStore, RouteStopView, RouteView } from './route-view';
-import { getRoadRoute } from './road-route';
+import { getRoadRoute, type RoadRouteGeometry } from './road-route';
 
 @Component({
   selector: 'app-route-map',
@@ -36,7 +36,7 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
   protected readonly usingFallback = signal(false);
   protected readonly roadLoading = signal(false);
   protected readonly roadFailed = signal(false);
-  private readonly roadRoutes = new Map<number, L.LatLngTuple[]>();
+  private readonly roadRoutes = new Map<number, RoadRouteGeometry>();
   private roadAbort?: AbortController;
   private map?: L.Map;
   private routeLayer?: L.LayerGroup;
@@ -144,7 +144,7 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
           positions.push([stop.latitude, stop.longitude]);
         }
       }
-      positions.push(...(this.roadRoutes.get(route.id) ?? []));
+      positions.push(...(this.roadRoutes.get(route.id)?.positions ?? []));
     }
     if (!this.routes.length) {
       for (const stop of this.pendingStops) positions.push([stop.latitude, stop.longitude]);
@@ -166,10 +166,11 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
       ];
       if (stops.length) {
         const road = this.roadRoutes.get(route.id);
-        const line = road ?? [...positions, storePosition];
+        const line = road?.positions ?? positions;
         L.polyline(line, { color: route.color, weight: 4, opacity: 0.8,
-          ...(road ? {} : { dashArray: '6 8' }),
+          ...(!road ? { dashArray: '6 8' } : {}),
         }).addTo(this.routeLayer);
+        if (road) this.drawSnapConnectors(positions, road.waypoints, route.color);
         const step = Math.max(1, Math.floor(line.length / 5));
         for (let index = 1; index < line.length; index += step) {
           this.addDirection(line[index - 1], line[index], route.color);
@@ -243,14 +244,14 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
         popupAnchor: [0, -25],
       }),
       keyboard: true,
-      title: `${this.store.name} · จุดเริ่มต้นและจุดกลับ`,
+      title: `${this.store.name} · จุดเริ่มต้น`,
       zIndexOffset: 700,
     })
-      .bindPopup(this.createPopup(this.store.name, ['จุดเริ่มต้นและจุดกลับของทุกเส้นทาง']))
+      .bindPopup(this.createPopup(this.store.name, ['จุดเริ่มต้นของทุกเส้นทาง']))
       .addTo(this.routeLayer);
     storeMarker
       .getElement()
-      ?.setAttribute('aria-label', `${this.store.name} จุดเริ่มต้นและจุดกลับ`);
+      ?.setAttribute('aria-label', `${this.store.name} จุดเริ่มต้น`);
   }
 
   private async loadRoadRoutes(): Promise<void> {
@@ -267,8 +268,10 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
       await Promise.all(routes.slice(index, index + 3).map(async (route) => {
         try {
           const store: L.LatLngTuple = [this.store.latitude, this.store.longitude];
-          const points: L.LatLngTuple[] = [store, ...route.stops.map(
-            (stop): L.LatLngTuple => [stop.latitude, stop.longitude]), store];
+          const stops = route.stops.filter((stop) => this.validPosition(stop.latitude, stop.longitude));
+          if (stops.length === 0) return;
+          const points: L.LatLngTuple[] = [store, ...stops.map(
+            (stop): L.LatLngTuple => [stop.latitude, stop.longitude])];
           const road = await getRoadRoute(points, request.signal);
           if (!request.signal.aborted) this.roadRoutes.set(route.id, road);
         } catch {
@@ -281,6 +284,26 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
       this.roadLoading.set(false);
       this.fitRoutes(this.visibleRoutes);
     }
+  }
+
+  private drawSnapConnectors(
+    actual: readonly L.LatLngTuple[],
+    snapped: readonly L.LatLngTuple[],
+    color: string,
+  ): void {
+    const routeLayer = this.routeLayer;
+    if (!routeLayer) return;
+    actual.forEach((position, index) => {
+      const roadPosition = snapped[index];
+      if (!roadPosition || (position[0] === roadPosition[0] && position[1] === roadPosition[1])) return;
+      L.polyline([position, roadPosition], {
+        color,
+        weight: 2,
+        opacity: 0.6,
+        dashArray: '2 5',
+        interactive: false,
+      }).addTo(routeLayer);
+    });
   }
 
   private addDirection(start: L.LatLngTuple, end: L.LatLngTuple, color: string): void {

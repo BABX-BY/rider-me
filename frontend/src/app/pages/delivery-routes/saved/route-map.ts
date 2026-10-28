@@ -1,4 +1,4 @@
-import { getRoadRoute } from '../map/road-route';
+import { getRoadRoute, type RoadRouteGeometry } from '../map/road-route';
 import {
   AfterViewInit,
   Component,
@@ -38,7 +38,7 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
   private resizeObserver?: ResizeObserver;
   private readonly basemapAbort = new AbortController();
   private readonly stopMarkers = new Map<number, L.Marker>();
-  private readonly roadRoutes = new Map<number, L.LatLngTuple[]>();
+  private readonly roadRoutes = new Map<number, RoadRouteGeometry>();
   private roadRequestId = 0;
   private roadAbort?: AbortController;
   protected readonly roadLoading = signal(false);
@@ -158,16 +158,17 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
 
     for (const route of this.visibleRoutes) {
       const stops = route.stops.filter((stop) => this.validPosition(stop.latitude, stop.longitude));
-      const straightPositions: L.LatLngTuple[] = [
+      const actualPositions: L.LatLngTuple[] = [
         storePosition,
         ...stops.map((stop): L.LatLngTuple => [stop.latitude, stop.longitude]),
-        storePosition,
       ];
-      const positions = this.roadRoutes.get(route.id) ?? straightPositions;
+      const road = this.roadRoutes.get(route.id);
+      const positions = road?.positions ?? actualPositions;
       if (stops.length) {
-        L.polyline(positions, { color: route.color, weight: 4, opacity: 0.8, ...(this.roadRoutes.has(route.id) ? {} : { dashArray: '6 8' }) }).addTo(
+        L.polyline(positions, { color: route.color, weight: 4, opacity: 0.8, ...(road ? {} : { dashArray: '6 8' }) }).addTo(
           this.routeLayer,
         );
+        if (road) this.drawSnapConnectors(actualPositions, road.waypoints, route.color);
       }
 
       for (const stop of stops) {
@@ -244,7 +245,7 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
         if (!stops.length) return;
         try {
           const points: L.LatLngTuple[] = [storePosition,
-            ...stops.map((stop): L.LatLngTuple => [stop.latitude, stop.longitude]), storePosition];
+            ...stops.map((stop): L.LatLngTuple => [stop.latitude, stop.longitude])];
           const road = await getRoadRoute(points, request.signal);
           if (!request.signal.aborted) this.roadRoutes.set(route.id, road);
         } catch {
@@ -258,6 +259,26 @@ export class RouteMap implements AfterViewInit, OnChanges, OnDestroy {
       this.renderRoutes();
       this.fitRoutes(this.visibleRoutes);
     }
+  }
+
+  private drawSnapConnectors(
+    actual: readonly L.LatLngTuple[],
+    snapped: readonly L.LatLngTuple[],
+    color: string,
+  ): void {
+    const routeLayer = this.routeLayer;
+    if (!routeLayer) return;
+    actual.forEach((position, index) => {
+      const roadPosition = snapped[index];
+      if (!roadPosition || (position[0] === roadPosition[0] && position[1] === roadPosition[1])) return;
+      L.polyline([position, roadPosition], {
+        color,
+        weight: 2,
+        opacity: 0.6,
+        dashArray: '2 5',
+        interactive: false,
+      }).addTo(routeLayer);
+    });
   }
 
   private storePosition(): L.LatLngTuple {

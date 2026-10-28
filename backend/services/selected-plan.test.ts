@@ -3,7 +3,7 @@ import { once } from "node:events";
 import { mock, test } from "node:test";
 import { Pool } from "pg";
 import { BUSINESS_DATE_SQL } from "../database/business-date.js";
-import { parseSelectedPlan, PlanError, selectedTripMetrics, type SelectedPlan } from "./selected-plan.js";
+import { confirmSelectedPlan, parseSelectedPlan, PlanError, selectedTripMetrics, type SelectedPlan } from "./selected-plan.js";
 
 const store = { latitude: 16.244335, longitude: 103.2494546 };
 const orders = [101, 102, 103].map((orderId, index) => ({
@@ -66,6 +66,44 @@ test("penalties are per late order, and food and dispatch are included in total 
   assert.equal(metrics.penalty, 20);
   assert.equal(metrics.totalCost, Number((120 + 15 + metrics.totalDistanceKm * 6 + 20).toFixed(2)));
   assert.equal(metrics.profit, Number((195 - metrics.totalCost).toFixed(2)));
+});
+
+test("road calculations include directed return legs and agree with independent money/ETA arithmetic", () => {
+  const metrics = selectedTripMetrics(store, orders, [1, 2, 3, 4]);
+  assert.equal(metrics.totalDistanceKm, 10);
+  assert.deepEqual(metrics.stops.map((stop) => stop.distanceKm), [1, 2, 3]);
+  assert.deepEqual(metrics.stops.map((stop) => stop.arrivalMinute), [692, 696, 702]);
+  assert.equal(metrics.elapsedMinutes, 20);
+  assert.equal(metrics.revenue, 390);
+  assert.equal(metrics.totalCost, 240 + 15 + 10 * 6 * 2);
+  assert.equal(metrics.profit, 15);
+  const late = selectedTripMetrics(store, orders, [30, 0.001, 1, 4]);
+  assert.deepEqual(late.stops.map((stop) => stop.isLate), [false, true, true]);
+  assert.equal(late.penalty, 40);
+  assert.throws(() => selectedTripMetrics(store, orders, [1, 2]), PlanError);
+});
+
+test("road requests require complete valid preview leg snapshots", () => {
+  for (const legs of [undefined, [1, 2], [1, 2, 3, -1], [1, 2, 3, Number.NaN]]) {
+    const value = { ...body(), distanceBasis: "road", trips: [{ riderId: 41, orderIds: [103, 101, 102], roadLegDistancesKm: legs }] };
+    assert.throws(() => parseSelectedPlan(value), PlanError);
+  }
+  assert.throws(() => parseSelectedPlan({ ...body(), distanceBasis: "client-price" }), PlanError);
+  assert.equal(parseSelectedPlan(body()).distanceBasis, "haversine");
+});
+
+test("a changed or tampered road preview is rejected before obtaining database locks", async () => {
+  const connect = mock.fn(async () => { throw new Error("must not connect"); });
+  const fetchMock = mock.method(globalThis, "fetch", async () => Response.json({
+    code: "Ok", distances: [[0, 1000, 2000, 3000], [1000, 0, 1000, 2000],
+      [2000, 1000, 0, 1000], [3000, 2000, 1000, 0]],
+  }));
+  try {
+    const value = { ...body(), distanceBasis: "road", trips: [{ riderId: 41, orderIds: [103, 101, 102], roadLegDistancesKm: [0, 0, 0, 0] }] };
+    await assert.rejects(confirmSelectedPlan({ connect } as unknown as Pick<Pool, "connect">, value),
+      (error: unknown) => error instanceof PlanError && error.status === 409);
+    assert.equal(connect.mock.callCount(), 0);
+  } finally { fetchMock.mock.restore(); }
 });
 
 // Opt in explicitly: RUN_DB_PLAN_TESTS=1 node --env-file=.env --import tsx --test services/selected-plan.test.ts
@@ -140,6 +178,7 @@ test("HTTP confirm -> PostgreSQL -> worksheet login -> rider work -> cancel", {
       assert.equal(context.store.store_id, 1);
       assert.equal(context.businessDate, today);
       assert.equal((await post("/route-plans/generate", {})).status, 400);
+      assert.equal((await post("/route-plans/road-matrix", { points: [] })).status, 400);
     });
     await t.test("rejects stale quantity, location, unavailable rider and historical dates without writing", async () => {
       for (const field of ["box_quantity", "latitude"] as const) {
@@ -209,6 +248,51 @@ test("HTTP confirm -> PostgreSQL -> worksheet login -> rider work -> cancel", {
       assert.equal(retry.status, 201);
       codes = (await retry.json()).plans;
       assert.ok(codes.every((code) => code.worksheetCode.includes("V2")));
+    });
+    await t.test("road preview and confirmation persist the same trusted legs, costs, return and ETAs", async () => {
+      assert.equal((await post("/route-plans/cancel-today", {})).status, 200);
+      const actualFetch = globalThis.fetch;
+      const providerFetch = mock.method(globalThis, "fetch", async (input: string | URL | Request, init?: RequestInit) => {
+        if (String(input).startsWith("https://router.project-osrm.org/")) {
+          return Response.json({ code: "Ok", distances: [
+            [0, 1000, 2000, 3000], [1000, 0, 1000, 2000],
+            [2000, 1000, 0, 1000], [3000, 2000, 1000, 0],
+          ] });
+        }
+        return actualFetch(input, init);
+      });
+      try {
+        const previewResponse = await post("/route-plans/road-matrix", { points: [store, ...orders] });
+        assert.equal(previewResponse.status, 200);
+        const preview = await previewResponse.json();
+        assert.equal(preview.distanceBasis, "road");
+        assert.equal(preview.distancesKm[0][3], 3);
+        const roadPayload = { ...payload, distanceBasis: "road", trips: [
+          { riderId: 41, orderIds: [103, 101], roadLegDistancesKm: [3, 2, 1] },
+          { riderId: 42, orderIds: [102], roadLegDistancesKm: [2, 2] },
+        ] };
+        const confirmed = await post("/route-plans/confirm", roadPayload);
+        assert.equal(confirmed.status, 201, JSON.stringify(await confirmed.clone().json()));
+        const result = await confirmed.json();
+        assert.equal(result.distanceBasis, "road");
+        codes = result.plans;
+        for (const code of codes) {
+          const trip = roadPayload.trips.find((item) => item.riderId === code.riderId)!;
+          const expected = selectedTripMetrics(store,
+            trip.orderIds.map((id) => orders.find((order) => order.orderId === id)!), trip.roadLegDistancesKm);
+          const plan = (await client.query("SELECT * FROM route_plans WHERE route_plan_id = $1", [code.routePlanId])).rows[0];
+          const stops = (await client.query("SELECT * FROM route_stops WHERE route_plan_id = $1 ORDER BY stop_sequence", [code.routePlanId])).rows;
+          assert.equal(Number(plan.total_distance), expected.totalDistanceKm);
+          assert.equal(Number(plan.total_cost), expected.totalCost);
+          assert.equal(Number(plan.total_revenue), expected.revenue);
+          assert.equal(Number(plan.total_profit), expected.profit);
+          assert.equal(plan.estimated_minutes, Math.ceil(expected.elapsedMinutes));
+          assert.deepEqual(stops.map((stop) => Number(stop.distance_from_previous)), trip.roadLegDistancesKm.slice(0, -1));
+          const midnight = new Date(today + "T00:00:00+07:00").getTime();
+          assert.deepEqual(stops.map((stop) => new Date(stop.estimated_arrival).getTime()),
+            expected.stops.map((stop) => midnight + stop.arrivalMinute * 60000));
+        }
+      } finally { providerFetch.mock.restore(); }
     });
     await t.test("delivery status update still works and prevents canceling a started worksheet", async () => {
       const code = codes[0]!;

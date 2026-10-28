@@ -38,13 +38,13 @@
   </div>
   <div class="delivery-map__footer">
     <span
-      >เลื่อนล้อเมาส์เพื่อซูม · เส้นสี: เส้นทางตามถนนรวมกลับร้าน
+      >เลื่อนล้อเมาส์เพื่อซูม · เส้นสี: จากร้านถึงจุดส่งสุดท้าย
       @if (usingFallback()) {
         <span role="status" title="MapTiler โหลดไม่ได้ จึงใช้ OpenStreetMap สำรอง">
           · ใช้แผนที่สำรอง</span
         >
       }
     </span>
-    <span role="status">@if (roadLoading()) { กำลังโหลดถนน... } @else if (roadFailed()) { บริการถนนขัดข้อง เส้นประเป็นเส้นสำรอง } @else { ตามลำดับใบงาน · ระยะในสรุปประมาณจากพิกัด }</span>
+    <span role="status">@if (roadLoading()) { กำลังโหลดถนน... } @else if (roadFailed()) { บริการถนนขัดข้อง เส้นประเป็นเส้นสำรอง } @else { ตามลำดับใบงาน · สรุปใช้ค่าที่บันทึกไว้ }</span>
   </div>
 </div>

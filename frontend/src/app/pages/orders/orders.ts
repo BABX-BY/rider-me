@@ -214,7 +214,7 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
     if (this.customers().length === 0) {
-      this.notification.set({ type: 'error', message: 'ยังไม่มีข้อมูลลูกค้าสำหรับสร้างออเดอร์ตัวอย่าง' });
+      this.notification.set({ type: 'error', message: 'ยังไม่มีข้อมูลลูกค้าสำหรับเพิ่มออเดอร์' });
       return;
     }
 
@@ -232,9 +232,9 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
       });
       const createdOrders = await this.orderApi.simulateOrders(items);
       this.orders.update((list) => [...list, ...createdOrders]);
-      this.notification.set({ type: 'success', message: `สร้างออเดอร์ตัวอย่างแบบสุ่มเพิ่ม ${amount} รายการ รวม ${this.orders().length} รายการแล้ว` });
+      this.notification.set({ type: 'success', message: `เพิ่มออเดอร์แล้ว ${amount} รายการ รวม ${this.orders().length} รายการ` });
     } catch (error) {
-      this.notification.set({ type: 'error', message: this.toMessage(error, 'สร้างออเดอร์ตัวอย่างได้บางส่วน กรุณาตรวจสอบรายการปัจจุบัน') });
+      this.notification.set({ type: 'error', message: this.toMessage(error, 'เพิ่มออเดอร์ไม่สำเร็จ กรุณาตรวจสอบรายการปัจจุบัน') });
       await this.loadOrders();
     } finally {
       this.savingOrder.set(false);

@@ -9,10 +9,8 @@ import { RouteApi, type ConfirmedPlanResponse } from '../../services/api/route-a
 import { RouteMap } from './map/route-map';
 import { toPendingStopViews, toRouteViews } from './map/route-view-adapter';
 import { toSelectedPlanRequest, type PlanningStore } from './planning/plan-persistence';
-import {
-  buildRoutePlanAlternatives,
-  type RoutePlanAlternative,
-} from './planning/route-alternatives';
+import type { RoutePlanAlternative } from './planning/route-alternatives';
+import { optimizeDeliveryRoutes } from './planning/route-optimizer';
 import {
   preparePlanningOrders,
   type PreparedPlanningOrders,
@@ -42,7 +40,8 @@ export class DeliveryRoutes implements OnInit {
   });
   protected readonly dataLoading = signal(false);
   protected readonly saving = signal(false);
-  protected readonly busy = computed(() => this.dataLoading() || this.saving());
+  protected readonly calculating = signal(false);
+  protected readonly busy = computed(() => this.dataLoading() || this.saving() || this.calculating());
   protected readonly confirmation = signal<ConfirmedPlanResponse | null>(null);
   protected readonly saveError = signal('');
   protected readonly dataError = signal('');
@@ -65,7 +64,17 @@ export class DeliveryRoutes implements OnInit {
       this.planAlternatives().find((plan) => plan.id === this.selectedAlternativeId())?.result ??
       null,
   );
+  protected readonly costBreakdown = computed(() => {
+    const trips = this.planResult()?.trips ?? [];
+    const sum = (key: 'foodCost' | 'dispatchCost') =>
+      Number(trips.reduce((total, trip) => total + trip.cost[key], 0).toFixed(2));
+    // ยอดต่อใบงานปัดเป็นสตางค์แล้ว จัดส่วนขนส่งให้บวกกลับได้ตรงกับยอดที่บันทึก
+    const transport = Number(trips.reduce((total, { cost }) => total + cost.totalCost -
+      cost.foodCost - cost.dispatchCost - cost.estimatedPenalty, 0).toFixed(2));
+    return { food: sum('foodCost'), dispatch: sum('dispatchCost'), transport };
+  });
   protected readonly planError = signal('');
+  protected readonly calculationTime = signal('');
   protected readonly usedRiderCount = computed(
     () => this.planResult()?.summary.usedRiderCount ?? 0,
   );
@@ -94,6 +103,7 @@ export class DeliveryRoutes implements OnInit {
     this.selectedAlternativeId.set(null);
     this.alternativeMessage.set('');
     this.planError.set('');
+    this.calculationTime.set('');
     this.showAllRoutes();
     this.dataLoading.set(true);
     this.dataError.set('');
@@ -144,26 +154,7 @@ export class DeliveryRoutes implements OnInit {
 
   protected async calculatePlan(): Promise<void> {
     if (this.busy() || this.confirmation()) return;
-
-    const alternatives = this.planAlternatives();
-
-    // เปรียบเทียบจากข้อมูลชุดเดียวกัน ปุ่มโหลดข้อมูลใหม่จะเริ่มคำนวณชุดใหม่
-    if (alternatives.length > 0) {
-      if (alternatives.length === 1) {
-        this.alternativeMessage.set('ยังไม่พบแผนอื่นที่แตกต่างจากข้อมูลชุดนี้');
-        return;
-      }
-
-      const currentIndex = alternatives.findIndex(
-        (plan) => plan.id === this.selectedAlternativeId(),
-      );
-      const nextIndex = (currentIndex + 1) % alternatives.length;
-      this.selectAlternative(alternatives[nextIndex].id);
-      this.alternativeMessage.set(`เลือกแผนที่ ${nextIndex + 1} จาก ${alternatives.length} แผน`);
-      return;
-    }
-
-    // ครั้งแรกอ่านออเดอร์และไรเดอร์ล่าสุด ก่อนสร้างแผนสำหรับเปรียบเทียบ
+    // ทุกครั้งอ่านออเดอร์/ไรเดอร์ล่าสุด แล้วหากลุ่มและลำดับใหม่ ไม่ใช่สลับตัวเลือกเดิม
     await this.loadPlanningData();
 
     const prepared = this.preparedOrders();
@@ -178,14 +169,20 @@ export class DeliveryRoutes implements OnInit {
       this.planError.set('ยังไม่มีออเดอร์รอดำเนินการของวันนี้ กรุณาเพิ่มออเดอร์ที่หน้าออเดอร์แล้วโหลดข้อมูลใหม่');
       return;
     }
+    if (this.availableRiders().length === 0) {
+      this.planError.set('ยังไม่มีไรเดอร์ว่างสำหรับจัดเส้นทาง');
+      return;
+    }
 
+    this.calculating.set(true);
     try {
-      const results = buildRoutePlanAlternatives(
-        store,
-        prepared.items.map((item) => item.routing),
-        this.availableRiders(),
-        { includeReturnDistance: true, singleTripPerRider: true },
-      );
+      const orders = prepared.items.map((item) => item.routing).sort((a, b) => a.orderId - b.orderId);
+      const points = [store, ...orders].map(({ latitude, longitude }) => ({ latitude, longitude }));
+      const matrix = await this.routeApi.getRoadMatrix(points);
+      if (matrix.distanceBasis !== 'road') throw new Error('Backend ยังไม่รองรับการคำนวณระยะตามถนน กรุณาอัปเดต Backend');
+      // เปิดโอกาสให้หน้าจอแสดงสถานะก่อนเริ่มค้นหาแผน
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      const results = optimizeDeliveryRoutes(store, orders, this.availableRiders(), matrix);
 
       if (results.length === 0) {
         this.planError.set('ยังไม่พบแผนที่สามารถแสดงได้');
@@ -193,13 +190,20 @@ export class DeliveryRoutes implements OnInit {
       }
 
       this.planAlternatives.set(results);
-      this.selectAlternative(results[0].id);
+      this.showAllRoutes();
+      this.selectedAlternativeId.set(results[0].id);
+      this.calculationTime.set(new Date().toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok' }));
 
       if (results.length === 1) {
-        this.alternativeMessage.set('ยังไม่พบแผนอื่นที่แตกต่างจากข้อมูลชุดนี้');
+        this.alternativeMessage.set('คำนวณจากข้อมูลล่าสุดแล้ว พบแผนที่เหมาะสม 1 แผน');
       }
     } catch (error) {
-      this.planError.set(error instanceof Error ? error.message : 'คำนวณเส้นทางไม่สำเร็จ');
+      const response = error as { status?: number; error?: { message?: string } };
+      this.planError.set(response.status === 404
+        ? 'Backend ยังไม่มี API คำนวณถนน กรุณา deploy Backend รุ่นใหม่ก่อน'
+        : response.error?.message ?? (error instanceof Error ? error.message : 'คำนวณถนนไม่สำเร็จ กรุณาลองใหม่'));
+    } finally {
+      this.calculating.set(false);
     }
   }
 
@@ -220,7 +224,7 @@ export class DeliveryRoutes implements OnInit {
     this.saveError.set('');
     try {
       const result = await this.routeApi.confirmSelectedPlan(
-        toSelectedPlanRequest(store, this.businessDate(), plan),
+        toSelectedPlanRequest(store, this.businessDate(), plan, 'road'),
       );
       this.confirmation.set(result);
       this.view.set('saved');
