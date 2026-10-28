@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { lastValueFrom } from 'rxjs';
 import { Api } from '../../config/api';
-import { Order } from '../../model/order.model';
+import type { Order } from '../../model/order.model';
 
 interface DeleteOrderResponse {
   message: string;
