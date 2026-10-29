@@ -72,6 +72,11 @@ export function toRouteViews(
         ? '—'
         : formatClockTime(trip.timing.lastDeliveryMinute),
     returnTime: formatClockTime(trip.timing.returnMinute),
+    riderIncome: trip.cost
+      ? Number((trip.cost.dispatchCost + trip.cost.transportCost).toFixed(2))
+      : undefined,
+    dispatchFee: trip.cost?.dispatchCost,
+    transportFee: trip.cost?.transportCost,
     stops: trip.timing.stops.map((stop) => {
       const source = ordersById.get(stop.orderId);
 

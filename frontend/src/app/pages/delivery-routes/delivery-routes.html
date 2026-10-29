@@ -414,6 +414,12 @@
                 <span>{{ route.distanceKm }} กม. · {{ route.durationMinutes }} นาที</span
                 ><span>คาดว่าส่งครบ {{ route.lastArrival }} น.</span>
               </div>
+              @if (route.riderIncome !== undefined) {
+                <div class="mt-1.5 flex items-center justify-between rounded-lg bg-primary/10 px-2 py-1 text-xs">
+                  <span class="text-base-content/70">รายได้ไรเดอร์:</span>
+                  <strong class="text-primary font-bold">฿{{ route.riderIncome | number:'1.2-2' }}</strong>
+                </div>
+              }
               @if (activeRouteId() === route.id) {
                 <ol class="stop-list" [id]="'route-stops-' + route.id">
                   <li class="return-stop">ออกจากร้าน {{ route.departureTime }} น.</li>

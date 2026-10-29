@@ -167,6 +167,7 @@ export class SavedDeliveryRoutes {
       revenue: Number(plan.total_revenue || 0),
       cost: Number(plan.total_revenue || 0) - Number(plan.total_profit || 0),
       profit: Number(plan.total_profit || 0),
+      riderIncome: Number((15 + Number(plan.total_distance || 0) * stops.reduce((total, stop) => total + Number(stop.box_quantity || 0), 0) * 2).toFixed(2)),
       deliveredStops: stops.filter((stop) => stop.delivery_status === 'DELIVERED').length,
       pendingStops: stops.filter((stop) => stop.delivery_status !== 'DELIVERED').length,
       stops: stops.map((stop): PreviewStop => ({

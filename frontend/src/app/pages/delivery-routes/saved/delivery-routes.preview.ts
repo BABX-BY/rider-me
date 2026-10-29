@@ -27,6 +27,7 @@ export interface PreviewRoute {
   deliveredStops?: number;
   pendingStops?: number;
   stops: readonly PreviewStop[];
+  riderIncome?: number;
 }
 
 export interface PreviewStore {

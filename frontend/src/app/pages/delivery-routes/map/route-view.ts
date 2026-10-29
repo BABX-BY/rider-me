@@ -34,4 +34,7 @@ export interface RouteView {
   lastArrival: string;
   returnTime: string;
   stops: readonly RouteStopView[];
+  riderIncome?: number;
+  dispatchFee?: number;
+  transportFee?: number;
 }
