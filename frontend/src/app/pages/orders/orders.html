@@ -21,7 +21,10 @@
       </button>
 
       <button type="button" class="btn btn-primary" [disabled]="busy" (click)="startAddingOrder()">
-        + เพิ่มออเดอร์
+        <svg class="size-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+        </svg>
+        เพิ่มออเดอร์
       </button>
     </div>
   </div>
@@ -86,7 +89,14 @@
   <!-- สรุปตัวเลข -->
   <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
     <div class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm">
-      <p class="text-sm text-base-content/70">ออเดอร์ทั้งหมด</p>
+      <div class="flex items-center justify-between">
+        <p class="text-sm text-base-content/70">ออเดอร์ทั้งหมด</p>
+        <div class="flex size-7 items-center justify-center rounded-lg bg-primary/15 text-primary">
+          <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+        </div>
+      </div>
       <p class="mt-1 text-3xl font-bold">
         {{ orders().length }}<span class="text-lg font-normal text-base-content/50"> / {{ maxOrders }}</span>
       </p>
@@ -94,13 +104,27 @@
     </div>
 
     <div class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm">
-      <p class="text-sm text-base-content/70">จำนวนกล่องรวม</p>
+      <div class="flex items-center justify-between">
+        <p class="text-sm text-base-content/70">จำนวนกล่องรวม</p>
+        <div class="flex size-7 items-center justify-center rounded-lg bg-secondary/15 text-secondary">
+          <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          </svg>
+        </div>
+      </div>
       <p class="mt-1 text-3xl font-bold">{{ totalBoxes() }}<span class="text-lg font-normal text-base-content/50">
           กล่อง</span></p>
     </div>
 
     <div class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm">
-      <p class="text-sm text-base-content/70">รอดำเนินการ</p>
+      <div class="flex items-center justify-between">
+        <p class="text-sm text-base-content/70">รอดำเนินการ</p>
+        <div class="flex size-7 items-center justify-center rounded-lg bg-warning/15 text-warning">
+          <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+      </div>
       <p class="mt-1 text-3xl font-bold text-warning">{{ pendingCount() }}<span
           class="text-lg font-normal text-base-content/50"> รายการ</span></p>
     </div>

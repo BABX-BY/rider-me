@@ -47,7 +47,9 @@
     <!-- Error -->
     <section class="rounded-box border border-error/20 bg-base-100 p-5 shadow-sm" role="alert">
       <div class="flex items-start gap-3">
-        <span class="text-2xl" aria-hidden="true">⚠️</span>
+        <svg class="size-6 text-error shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
         <div class="min-w-0">
           <h2 class="font-semibold">ไม่สามารถโหลดข้อมูลได้</h2>
           <p class="mt-1 text-sm text-base-content/70">{{ errorMessage() }}</p>
@@ -94,6 +96,11 @@
           class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5">
           <div class="flex items-center justify-between gap-2">
             <p class="text-xs text-base-content/60 sm:text-sm">กล่องทั้งหมด</p>
+            <div class="flex size-7 items-center justify-center rounded-lg bg-primary/15 text-primary">
+              <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+            </div>
 
           </div>
           <p class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">{{ work().totalBoxes }}</p>
@@ -104,6 +111,12 @@
           class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5">
           <div class="flex items-center justify-between gap-2">
             <p class="text-xs text-base-content/60 sm:text-sm">จุดส่งทั้งหมด</p>
+            <div class="flex size-7 items-center justify-center rounded-lg bg-secondary/15 text-secondary">
+              <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
           </div>
           <p class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">{{ work().totalStops }}</p>
           <p class="mt-1 text-xs text-base-content/50">จุดส่ง</p>
@@ -113,6 +126,11 @@
           class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5">
           <div class="flex items-center justify-between gap-2">
             <p class="text-xs text-base-content/60 sm:text-sm">จัดส่งแล้ว</p>
+            <div class="flex size-7 items-center justify-center rounded-lg bg-success/15 text-success">
+              <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
           </div>
           <p class="mt-4 text-3xl font-bold tracking-tight text-success sm:text-4xl">{{ work().deliveredStops }}</p>
           <p class="mt-1 text-xs text-base-content/50">จุดส่งสำเร็จ</p>
@@ -122,6 +140,11 @@
           class="rounded-box border border-base-300 bg-base-100 p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5">
           <div class="flex items-center justify-between gap-2">
             <p class="text-xs text-base-content/60 sm:text-sm">รอจัดส่ง</p>
+            <div class="flex size-7 items-center justify-center rounded-lg bg-warning/15 text-warning">
+              <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
           </div>
           <p class="mt-4 text-3xl font-bold tracking-tight text-warning sm:text-4xl">{{ work().pendingStops }}</p>
           <p class="mt-1 text-xs text-base-content/50">จุดที่เหลือ</p>
@@ -236,7 +259,9 @@
                 <!-- Navigation -->
                 <button type="button" class="btn btn-primary mt-4 min-h-11 w-full sm:w-auto"
                   [disabled]="stop.latitude === null" (click)="openNavigation(stop)">
-                  <span aria-hidden="true">↗</span>
+                  <svg class="size-4 shrink-0 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
                   เปิดแผนที่นำทาง
                 </button>
                 <button type="button" class="btn btn-outline mt-2 min-h-11 w-full sm:ml-2 sm:mt-4 sm:w-auto"

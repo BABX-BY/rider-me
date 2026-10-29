@@ -86,6 +86,10 @@
             [disabled]="savingCustomer()"
             (click)="startPickingLocation()"
           >
+            <svg class="size-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
             เลือกตำแหน่งบนแผนที่
           </button>
 
@@ -100,7 +104,15 @@
               [class.text-warning]="!status.inService"
             >
               <span class="font-semibold flex items-center gap-1.5">
-                <span>{{ status.inService ? '✓' : '⚠️' }}</span>
+                @if (status.inService) {
+                  <svg class="size-4 shrink-0 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                } @else {
+                  <svg class="size-4 shrink-0 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                }
                 <span>{{ status.inService ? 'อยู่ในพื้นที่บริการ' : 'อยู่นอกพื้นที่บริการ (เกิน 3 กม.)' }}</span>
               </span>
               <span class="font-mono text-[11px] opacity-80">
@@ -126,7 +138,10 @@
               @if (savingCustomer()) {
                 กำลังบันทึก...
               } @else if (addingCustomer()) {
-                เพิ่มลูกค้า
+                <svg class="size-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            เพิ่มลูกค้า
               } @else {
                 บันทึกการแก้ไข
               }
@@ -155,6 +170,9 @@
             [disabled]="savingCustomer() || deletingCustomerId() !== null"
             (click)="startAddingCustomer()"
           >
+            <svg class="size-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
             เพิ่มลูกค้า
           </button>
         </div>
@@ -173,6 +191,9 @@
           type="submit"
           [disabled]="loading() || savingCustomer() || deletingCustomerId() !== null"
         >
+          <svg class="size-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
           ค้นหา
         </button>
         <button

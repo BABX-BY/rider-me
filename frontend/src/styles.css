@@ -2,3 +2,79 @@
 
 @import 'tailwindcss';
 @plugin "daisyui";
+
+:root,
+[data-theme="rider-dark"] {
+  color-scheme: dark;
+
+  /* Base palette - Modern dark midnight with purple/slate undertones */
+  --color-base-100: oklch(14% 0.02 265);
+  --color-base-200: oklch(18% 0.025 265);
+  --color-base-300: oklch(24% 0.03 265);
+  --color-base-content: oklch(96% 0.01 265);
+
+  /* Primary - Vibrant Purple/Violet */
+  --color-primary: oklch(65% 0.23 285);
+  --color-primary-content: oklch(98% 0.01 285);
+
+  /* Secondary - Electric Sky / Cyan-Blue */
+  --color-secondary: oklch(74% 0.16 230);
+  --color-secondary-content: oklch(16% 0.03 230);
+
+  /* Accent - Vivid Cyan/Aqua */
+  --color-accent: oklch(76% 0.15 200);
+  --color-accent-content: oklch(16% 0.03 200);
+
+  /* Neutral surfaces */
+  --color-neutral: oklch(22% 0.02 265);
+  --color-neutral-content: oklch(92% 0.01 265);
+
+  /* System feedback states */
+  --color-info: oklch(74% 0.16 230);
+  --color-info-content: oklch(16% 0.03 230);
+  --color-success: oklch(75% 0.16 160);
+  --color-success-content: oklch(18% 0.04 160);
+  --color-warning: oklch(82% 0.16 85);
+  --color-warning-content: oklch(25% 0.05 85);
+  --color-error: oklch(68% 0.2 25);
+  --color-error-content: oklch(98% 0.01 25);
+
+  --radius-selector: 0.75rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+}
+
+/* Custom sleek dark scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-base-100);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-base-300);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
+}
+
+/* Leaflet dark harmonious styling */
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background-color: var(--color-base-200) !important;
+  color: var(--color-base-content) !important;
+  border: 1px solid var(--color-base-300);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
+}
+
+.leaflet-container {
+  font-family: inherit !important;
+}

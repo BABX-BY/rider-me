@@ -32,9 +32,17 @@
       </div>
       <div class="join">
         <button type="button" class="btn btn-sm join-item" [class.btn-primary]="viewMode() === 'cards'"
-          (click)="viewMode.set('cards')" aria-label="แสดงแบบการ์ด">การ์ด</button>
+          (click)="viewMode.set('cards')" aria-label="แสดงแบบการ์ด">
+          <svg class="size-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+          </svg>
+          การ์ด</button>
         <button type="button" class="btn btn-sm join-item" [class.btn-primary]="viewMode() === 'table'"
-          (click)="viewMode.set('table')" aria-label="แสดงแบบตาราง">ตาราง</button>
+          (click)="viewMode.set('table')" aria-label="แสดงแบบตาราง">
+          <svg class="size-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+          </svg>
+          ตาราง</button>
       </div>
     </div>
 
@@ -82,7 +90,9 @@
           <div class="mt-4 flex justify-end">
             <button type="button" class="btn btn-square btn-ghost" title="แสดง QR สำหรับ Rider"
               aria-label="แสดง QR สำหรับ Rider" (click)="showQr(rider)">
-              <span class="text-xl" aria-hidden="true">▦</span>
+              <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+              </svg>
             </button>
           </div>
         </article>
@@ -113,7 +123,13 @@
             </td>
             <td class="text-success">{{ rider.delivered_order_count ?? 0 }} ออเดอร์ / {{ rider.delivered_box_count ?? 0 }} กล่อง</td>
             <td class="text-warning">{{ rider.pending_order_count ?? 0 }} ออเดอร์ / {{ rider.pending_box_count ?? 0 }} กล่อง</td>
-            <td><button type="button" class="btn btn-square btn-ghost btn-sm" title="แสดง QR" aria-label="แสดง QR" (click)="showQr(rider)">▦</button></td>
+            <td>
+              <button type="button" class="btn btn-square btn-ghost btn-sm" title="แสดง QR" aria-label="แสดง QR" (click)="showQr(rider)">
+                <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                </svg>
+              </button>
+            </td>
           </tr>
           }
         </tbody>
