@@ -403,7 +403,7 @@
                   ><strong>{{ route.name }}</strong
                   ><small>{{ route.plate }} · รอบ {{ route.roundNumber }}</small
                   ><small
-                    >{{ route.stops.length }} ออเดอร์ · {{ route.totalBoxes }} กล่อง</small
+                    >{{ route.stops.length }} ออเดอร์ · {{ route.totalBoxes }} กล่อง (ยอดอาหาร ฿{{ route.totalBoxes * 65 | number:'1.2-2' }})</small
                   ></span
                 >
                 <span class="text-base-content/50" aria-hidden="true">{{
@@ -435,7 +435,7 @@
                         <span
                           ><strong>{{ stop.customer }}</strong
                           ><small
-                            >#{{ stop.id }} · {{ stop.boxes }} กล่อง · คาดว่าถึง
+                            >#{{ stop.id }} · {{ stop.boxes }} กล่อง (฿{{ stop.boxes * 65 }}) · คาดว่าถึง
                             {{ stop.eta }} น.</small
                           ><small>{{ stop.address }}</small>
                           @if (stop.phone) {

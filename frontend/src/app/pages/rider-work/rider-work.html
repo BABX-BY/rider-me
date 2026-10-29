@@ -104,7 +104,7 @@
 
           </div>
           <p class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">{{ work().totalBoxes }}</p>
-          <p class="mt-1 text-xs text-base-content/50">กล่อง</p>
+          <p class="mt-1 text-xs text-base-content/60">กล่อง (ยอดอาหารรวม ฿{{ work().totalBoxes * 65 | number:'1.2-2' }})</p>
         </article>
 
         <article
@@ -249,6 +249,9 @@
 
                   <span class="text-base-content/65">จำนวนกล่อง</span>
                   <strong>{{ stop.boxes }}</strong>
+                  <span class="text-base-content/30 mx-1" aria-hidden="true">|</span>
+                  <span class="text-base-content/65">ยอดเงิน:</span>
+                  <strong class="text-primary font-bold">฿{{ stop.boxes * 65 }}</strong>
                 </div>
 
                 <p class="mt-3 text-sm text-base-content/60">

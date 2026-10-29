@@ -71,7 +71,7 @@
           <div class="mt-4 rounded-lg border border-base-300 px-3 py-2 text-sm">
             @if ((rider.order_count ?? 0) > 0) {
               <span class="font-semibold text-success">มีงานวันนี้</span>
-              <span class="ml-2 text-base-content/60">{{ rider.order_count }} ออเดอร์ · {{ rider.total_box_count ?? 0 }} กล่อง</span>
+              <span class="ml-2 text-base-content/60">{{ rider.order_count }} ออเดอร์ · {{ rider.total_box_count ?? 0 }} กล่อง (ยอดอาหาร ฿{{ (rider.total_box_count ?? 0) * 65 | number:'1.2-2' }})</span>
             } @else {
               <span class="font-semibold text-base-content/60">ยังไม่มีงานวันนี้</span>
             }
@@ -105,7 +105,7 @@
     } @else {
     <div class="overflow-x-auto rounded-box border border-base-300 bg-base-100">
       <table class="table">
-        <thead><tr><th>Rider</th><th>ทะเบียนรถ</th><th>สถานะ</th><th>งานวันนี้</th><th>ออเดอร์</th><th>กล่อง</th><th>ส่งแล้ว</th><th>รอส่ง</th><th></th></tr></thead>
+        <thead><tr><th>Rider</th><th>ทะเบียนรถ</th><th>สถานะ</th><th>งานวันนี้</th><th>ออเดอร์</th><th>กล่อง</th><th>ยอดอาหาร</th><th>ส่งแล้ว</th><th>รอส่ง</th><th></th></tr></thead>
         <tbody>
           @for (rider of riders(); track rider.rider_id) {
           <tr>
@@ -114,6 +114,7 @@
             <td><span class="badge" [class]="statusClass(rider.status)">{{ statusLabel(rider.status) }}</span></td>
             <td>{{ rider.order_count ?? 0 }}</td>
             <td>{{ rider.total_box_count ?? 0 }}</td>
+            <td class="font-semibold text-primary">฿{{ (rider.total_box_count ?? 0) * 65 | number:'1.2-2' }}</td>
             <td>
               @if ((rider.order_count ?? 0) > 0) {
                 <span class="badge badge-success">มีงานวันนี้</span>

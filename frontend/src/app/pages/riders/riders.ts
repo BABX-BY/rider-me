@@ -1,4 +1,5 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Rider } from '../../model/rider.model';
 import { RiderApi } from '../../services/api/rider-api';
@@ -7,7 +8,7 @@ const PROD_FRONTEND_URL = 'https://rider-frontend-git-dev-mexw.vercel.app';
 
 @Component({
   selector: 'app-riders',
-  imports: [FormsModule],
+  imports: [FormsModule, DecimalPipe],
   templateUrl: './riders.html',
   styleUrl: './riders.css',
 })

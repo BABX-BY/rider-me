@@ -1,4 +1,5 @@
 import { Component, computed, ElementRef, inject, OnDestroy, OnInit, signal, ViewChild } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
 import * as L from 'leaflet';
 import { MAPTILER_API_KEY } from '../../config/map';
 import { Rider } from '../../model/rider.model';
@@ -8,7 +9,7 @@ import { RiderWorkApi } from '../../services/api/rider-work-api';
 
 @Component({
   selector: 'app-rider-work',
-  imports: [],
+  imports: [DecimalPipe],
   templateUrl: './rider-work.html',
   styleUrl: './rider-work.css',
 })
