@@ -30,6 +30,30 @@ export class RiderWork implements OnDestroy, OnInit {
   protected readonly statusUpdating = signal<number | null>(null);
   protected readonly selectedStopSequence = signal<number | null>(null);
   protected readonly showOverviewMap = signal(false);
+  protected readonly stopPhotos = signal<Record<number, string>>({});
+
+  protected onPhotoSelected(event: Event, routeStopId: number): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        const photoUrl = reader.result;
+        this.stopPhotos.update((photos) => ({ ...photos, [routeStopId]: photoUrl }));
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  protected removePhoto(routeStopId: number): void {
+    this.stopPhotos.update((photos) => {
+      const next = { ...photos };
+      delete next[routeStopId];
+      return next;
+    });
+  }
   protected readonly work = signal<RiderWorkSummary>({
     workDate: '',
     totalBoxes: 0,

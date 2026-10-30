@@ -1,10 +1,16 @@
-<section class="space-y-4" aria-labelledby="saved-page-title">
+<section class="space-y-4 print:hidden" aria-labelledby="saved-page-title">
   <header class="flex flex-wrap items-end justify-between gap-3">
     <div>
       <h1 id="saved-page-title" class="text-2xl font-bold">เส้นทางจัดส่ง</h1>
       <p class="mt-1 text-base-content/70">ใบงานวันนี้ · {{ businessDateLabel() }}</p>
     </div>
     <div class="flex gap-2">
+      <button type="button" class="btn btn-primary btn-outline gap-1.5" (click)="printManifest()" [disabled]="loading() || routes().length === 0">
+        <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+        </svg>
+        พิมพ์ใบงาน
+      </button>
       <button type="button" class="btn btn-outline" (click)="refreshRoutes()" [disabled]="loading() || canceling()">
         โหลดข้อมูลใหม่
       </button>
@@ -222,3 +228,73 @@
     </dl>
   </details>
 </section>
+
+<!-- เอกสารสำหรับพิมพ์ใบงานจัดส่ง (แสดงเฉพาะตอนสั่งพิมพ์ Print) -->
+<div class="hidden print:block p-4 text-black bg-white space-y-6">
+  <div class="border-b-2 border-black pb-3">
+    <div class="flex justify-between items-start">
+      <div>
+        <h1 class="text-2xl font-bold">ใบงานจัดส่งอาหารประจำวัน (Delivery Manifest)</h1>
+        <p class="text-sm text-gray-700">ร้าน: {{ store()?.name || 'ร้านข้าวกล่องเดลิเวอรี' }} · เบอร์โทร: {{ store()?.phone }}</p>
+        <p class="text-xs text-gray-600">วันที่จัดส่ง: {{ businessDateLabel() }} · กำหนดเวลาออกส่ง: 11:30 น. (Deadline: 12:30 น.)</p>
+      </div>
+      <div class="text-right">
+        <p class="font-bold text-lg">รวม {{ totalOrders() }} ออเดอร์ ({{ totalBoxes() }} กล่อง)</p>
+        <p class="text-sm text-gray-600">ไรเดอร์ทั้งหมด {{ routes().length }} คน</p>
+      </div>
+    </div>
+  </div>
+
+  @for (route of routes(); track route.id) {
+    <div class="border border-gray-400 rounded p-4 break-inside-avoid mb-6">
+      <div class="flex justify-between items-center border-b border-gray-300 pb-2 mb-3">
+        <div>
+          <h2 class="text-lg font-bold">ไรเดอร์: {{ route.name }} (ทะเบียน: {{ route.plate }})</h2>
+          <p class="text-xs text-gray-600">เลขใบงาน: {{ route.worksheetCode }} · ระยะทาง: {{ route.distanceKm }} กม. · เวลาวิ่ง: {{ route.durationMinutes }} นาที</p>
+        </div>
+        <div class="text-right">
+          <span class="text-sm font-semibold">ยอดออเดอร์: ฿{{ ((route.revenue ?? (route.totalBoxes * 65))) | number:'1.2-2' }}</span>
+          <span class="block text-xs text-gray-600">รายได้ไรเดอร์: ฿{{ route.riderIncome | number:'1.2-2' }}</span>
+        </div>
+      </div>
+
+      <table class="w-full text-xs text-left border-collapse">
+        <thead>
+          <tr class="border-b border-gray-400 bg-gray-100">
+            <th class="p-1.5 w-12 text-center">ลำดับ</th>
+            <th class="p-1.5">ลูกค้า</th>
+            <th class="p-1.5">ที่อยู่จัดส่ง</th>
+            <th class="p-1.5 text-center w-16">จำนวน</th>
+            <th class="p-1.5 text-right w-20">ยอดเงิน</th>
+            <th class="p-1.5 text-center w-24">เวลาถึง</th>
+            <th class="p-1.5 w-28 text-center border-l border-gray-300">ลายมือชื่อผู้รับ</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (stop of route.stops; track stop.id) {
+            <tr class="border-b border-gray-200">
+              <td class="p-1.5 text-center font-bold">{{ stop.sequence }}</td>
+              <td class="p-1.5 font-medium">{{ stop.customer }}</td>
+              <td class="p-1.5">{{ stop.address }}</td>
+              <td class="p-1.5 text-center font-semibold">{{ stop.boxes }} กล่อง</td>
+              <td class="p-1.5 text-right font-mono">฿{{ stop.boxes * 65 }}</td>
+              <td class="p-1.5 text-center">{{ stop.eta }} น.</td>
+              <td class="p-1.5 border-l border-gray-300"></td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <div class="flex justify-between items-end pt-8 border-t border-gray-300 text-xs">
+    <div>
+      <p class="mb-6">ผู้จัดเตรียมออเดอร์ (ครัว): .....................................................</p>
+      <p>วันที่พิมพ์: {{ businessDateLabel() }}</p>
+    </div>
+    <div class="text-right">
+      <p class="mb-6">ผู้ตรวจสอบความเรียบร้อยหน้าร้าน: .....................................................</p>
+      <p>ลงนามกำกับ</p>
+    </div>
+  </div>
+</div>

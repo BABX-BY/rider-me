@@ -47,6 +47,22 @@ export class Orders implements OnInit, AfterViewInit, OnDestroy {
   protected readonly customers = signal<Customer[]>([]);
 
   protected readonly isFull = computed(() => this.orders().length >= MAX_ORDERS);
+  protected readonly statusFilter = signal<string>('ALL');
+  protected readonly filteredOrders = computed(() => {
+    const filter = this.statusFilter();
+    const list = this.orders();
+    if (filter === 'ALL') return list;
+    return list.filter((order) => order.status === filter);
+  });
+  protected readonly assignedCount = computed(
+    () => this.orders().filter((order) => order.status === 'ASSIGNED').length,
+  );
+  protected readonly deliveringCount = computed(
+    () => this.orders().filter((order) => order.status === 'DELIVERING').length,
+  );
+  protected readonly deliveredCount = computed(
+    () => this.orders().filter((order) => order.status === 'DELIVERED').length,
+  );
   protected readonly totalBoxes = computed(() =>
     this.orders().reduce((sum, order) => sum + order.box_quantity, 0),
   );

@@ -89,3 +89,14 @@ body {
 .leaflet-container {
   font-family: inherit !important;
 }
+
+@media print {
+  app-header, header, .navbar, .btn, .no-print {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+    background-image: none !important;
+    color: black !important;
+  }
+}

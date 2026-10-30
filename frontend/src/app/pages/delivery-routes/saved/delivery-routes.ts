@@ -60,6 +60,10 @@ export class SavedDeliveryRoutes {
     this.selectedStopId.set(null);
   }
 
+  protected printManifest(): void {
+    window.print();
+  }
+
   protected refreshRoutes(): void {
     void this.loadRoutes();
   }
